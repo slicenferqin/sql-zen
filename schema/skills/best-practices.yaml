@@ -1,0 +1,240 @@
+# schema/skills/best-practices.yaml
+# SQL 最佳实践和反模式指南
+
+# 这个文档提供编写高质量 SQL 查询的通用最佳实践
+
+sql_best_practices:
+  performance:
+    - rule: "避免 SELECT *"
+      reason: "只查询需要的列，减少数据传输、内存使用和网络开销"
+      example: "SELECT order_id, user_id, total_amount FROM orders"
+      bad_example: "SELECT * FROM orders"
+      
+    - rule: "使用合理的 LIMIT"
+      reason: "限制返回行数，避免大结果集导致的性能问题和超时"
+      example: "SELECT * FROM orders LIMIT 100"
+      note: "默认值 100，可根据需求调整"
+      
+    - rule: "索引友好的查询"
+      reason: "确保 WHERE 和 JOIN 条件使用索引列，避免全表扫描"
+      example: "WHERE created_at >= '2024-01-01' AND user_id = '123'"
+      bad_example: "WHERE DATE(created_at) = '2024-01-01'"
+      explanation: "DATE() 函数无法使用索引，需要全表扫描"
+  
+    - rule: "避免在 WHERE 中使用函数"
+      reason: "函数会阻止数据库使用索引，导致性能下降"
+      example: "WHERE created_at >= '2024-01-01'"
+      bad_example: "WHERE YEAR(created_at) = 2024"
+      
+    - rule: "使用 IN 代替多个 OR"
+      reason: "IN 查询优化器可以更好地优化，通常性能更好"
+      example: "WHERE status IN ('completed', 'paid', 'shipped')"
+      bad_example: "WHERE status = 'completed' OR status = 'paid' OR status = 'shipped'"
+      
+    - rule: "选择合适的 JOIN 类型"
+      reason: "INNER JOIN 性能通常最好，LEFT/RIGHT JOIN 只在需要时使用"
+      example: "FROM orders o INNER JOIN users u ON o.user_id = u.user_id"
+      note: "明确 JOIN 类型，避免意外的 CROSS JOIN"
+  
+  readability:
+    - rule: "使用表别名"
+      reason: "简化查询，提高可读性，特别是在多表 JOIN 时"
+      example: "FROM orders o INNER JOIN users u ON o.user_id = u.user_id"
+      bad_example: "FROM orders INNER JOIN users ON orders.user_id = users.user_id"
+      
+    - rule: "格式化 SQL"
+      reason: "保持一致的缩进和换行，提高可维护性"
+      example: |
+        SELECT 
+          o.order_id,
+          u.user_name
+        FROM orders o
+        INNER JOIN users u ON o.user_id = u.user_id
+      
+    - rule: "使用有意义的列别名"
+      reason: "提高结果的可读性"
+      example: "SELECT COUNT(*) as order_count, SUM(amount) as total_amount"
+      
+    - rule: "注释复杂查询"
+      reason: "帮助理解查询逻辑"
+      example: "-- 只统计已完成的订单 WHERE status = 'completed'"
+  
+  correctness:
+    - rule: "正确处理 NULL 值"
+      reason: "NULL 的语义不同，需要使用 IS NULL 或 IS NOT NULL"
+      example: "WHERE email IS NOT NULL AND deleted_at IS NULL"
+      bad_example: "WHERE email != NULL"
+      note: "= NULL 或 != NULL 永远不会匹配"
+      
+    - rule: "GROUP BY 的正确性"
+      reason: "SELECT 中的非聚合列必须在 GROUP BY 中出现"
+      example: "SELECT user_id, COUNT(*) FROM orders GROUP BY user_id"
+      bad_example: "SELECT user_name, COUNT(*) FROM orders GROUP BY user_id"
+      note: "PostgreSQL 允许主键，但其他数据库会报错。最佳实践是明确列出所有非聚合列。"
+      
+    - rule: "使用 HAVING 过滤聚合结果"
+      reason: "WHERE 过滤行，HAVING 过滤聚合结果"
+      example: "SELECT user_id, SUM(amount) FROM orders GROUP BY user_id HAVING SUM(amount) > 1000"
+      bad_example: "SELECT user_id, SUM(amount) FROM orders WHERE SUM(amount) > 1000 GROUP BY user_id"
+      
+    - rule: "明确的 JOIN 条件"
+      reason: "避免笛卡尔积，确保 JOIN 条件正确"
+      example: "FROM orders o INNER JOIN users u ON o.user_id = u.user_id"
+      bad_example: "FROM orders o, users u WHERE o.user_id = u.user_id"
+      
+    - rule: "注意字符串比较"
+      reason: "区分大小写和空格，使用精确匹配"
+      example: "WHERE status = 'completed'"
+      note: "根据数据库，可能需要考虑大小写（MySQL 默认不区分，PostgreSQL 区分）"
+  
+  safety:
+    - rule: "只读查询优先"
+      reason: "默认只允许 SELECT 语句，保护数据安全"
+      note: "UPDATE/DELETE 需要特殊权限和确认"
+      
+    - rule: "验证输入"
+      reason: "SQL-Zen 会自动处理参数化查询，防止 SQL 注入"
+      note: "用户输入不应直接拼接到 SQL 中"
+      
+    - rule: "限制数据访问范围"
+      reason: "添加合理的 WHERE 条件，限制返回数据范围"
+      example: "WHERE user_id = '当前用户' AND created_at >= '最近时间'"
+      
+    - rule: "避免敏感信息"
+      reason: "不要查询密码、密钥等敏感数据"
+      note: "Schema 文件不应该包含敏感列的定义"
+
+# 反模式（Anti-patterns）
+
+anti_patterns:
+  - pattern: "SELECT *"
+    problem: "查询了不必要的列，浪费资源"
+    impact: "高 - 增加网络传输、内存使用和解析时间"
+    solution: "明确列出需要的列"
+    
+  - pattern: "N+1 查询问题"
+    problem: "在循环中执行查询，每次查询获取一行数据"
+    impact: "极高 - 性能灾难"
+    solution: "使用 JOIN 一次性获取所有数据"
+    example: |
+      -- 反模式（N+1 次查询）
+      FOR each user:
+        SELECT * FROM orders WHERE user_id = user.id
+      
+      -- 正确（1 次查询）
+      SELECT u.*, o.*
+      FROM users u
+      LEFT JOIN orders o ON u.user_id = o.user_id
+      
+  - pattern: "笛卡尔积"
+    problem: "忘记 JOIN 条件或使用 CROSS JOIN"
+    impact: "极高 - 返回行数 = 行数A × 行数B"
+    solution: "明确指定 JOIN 条件"
+    bad_example: "SELECT * FROM users, orders"
+    good_example: "SELECT * FROM users INNER JOIN orders ON users.id = orders.user_id"
+    
+  - pattern: "过度使用 DISTINCT"
+    problem: "用 DISTINCT 解决数据问题，但根源是 JOIN 错误"
+    impact: "中等 - 性能下降，掩盖真正问题"
+    solution: "修复 JOIN 条件或数据质量"
+    
+  - pattern: "大 OFFSET"
+    problem: "使用 OFFSET 分页，越往后越慢"
+    impact: "高 - 大偏移量时性能急剧下降"
+    solution: "使用键值分页（游标）"
+    
+  - pattern: "在 WHERE 中使用函数"
+    problem: "函数阻止索引使用，导致全表扫描"
+    impact: "高 - 性能大幅下降"
+    solution: "改写查询避免函数"
+    bad_example: "WHERE DATE(created_at) = '2024-01-01'"
+    good_example: "WHERE created_at >= '2024-01-01' AND created_at < '2024-01-02'"
+
+# 特定数据库的最佳实践
+
+postgresql:
+  - best_practice: "使用 :: 进行类型转换"
+    example: "SELECT id::text as id_text FROM users"
+    note: "PostgreSQL 原生的类型转换语法，性能更好"
+    
+  - best_practice: "使用 GENERATE_SERIES 生成序列"
+    example: "SELECT GENERATE_SERIES(1, 10) as n"
+    note: "生成从 1 到 10 的数字序列，用于生成测试数据"
+    
+  - best_practice: "使用 JSON_AGG 生成 JSON"
+    example: "SELECT JSON_AGG(product_name) as products FROM orders"
+    note: "直接生成 JSON 数组，避免应用层处理"
+
+mysql:
+  - best_practice: "使用 LIMIT 和 OFFSET 分页"
+    example: "SELECT * FROM orders LIMIT 20 OFFSET 40"
+    note: "MySQL 的分页语法，注意大数据集时 OFFSET 的性能问题"
+    
+  - best_practice: "使用 DATE_FORMAT 格式化日期"
+    example: "SELECT DATE_FORMAT(created_at, '%Y-%m') as month FROM orders"
+    note: "MySQL 的日期格式化函数"
+
+# 调试技巧
+
+debugging:
+  - technique: "使用 EXPLAIN 分析查询计划"
+    description: "在 SQL 前添加 EXPLAIN，查看数据库如何执行查询"
+    example: "EXPLAIN SELECT * FROM orders WHERE user_id = '123'"
+    
+  - technique: "逐步构建查询"
+    description: "从简单的 SELECT * 开始，逐步添加 WHERE、JOIN、GROUP BY"
+    usage: "每次添加一个元素后测试，定位问题所在"
+    
+  - technique: "验证列名和表名"
+    description: "确保使用的表名和列名在 Schema 中存在且拼写正确"
+    command: "使用 /sql-zen-explore 检查表定义"
+    
+  - technique: "检查枚举值"
+    description: "确保 WHERE 条件中使用的值在 enum 定义中"
+    example: "检查 status = 'paid' 是否在 enum 列表中"
+    note: "常见的错误来源"
+
+# 代码审查清单
+
+code_review_checklist:
+  - item: "查询是否使用 LIMIT？"
+    importance: "高"
+    
+  - item: "是否避免了 SELECT *？"
+    importance: "高"
+    
+  - item: "JOIN 条件是否正确？"
+    importance: "高"
+    
+  - item: "WHERE 条件是否使用了索引列？"
+    importance: "高"
+    
+  - item: "GROUP BY 是否包含所有非聚合列？"
+    importance: "中"
+    
+  - item: "NULL 值是否正确处理？"
+    importance: "中"
+    
+  - item: "时间查询是否使用索引友好的格式？"
+    importance: "中"
+    
+  - item: "是否使用了表别名提高可读性？"
+    importance: "低"
+    
+  - item: "复杂的逻辑是否添加了注释？"
+    importance: "低"
+
+# 学习资源
+
+learning_resources:
+  - title: "SQL 性能优化"
+    url: "https://www.postgresql.org/docs/current/performance-tips.html"
+    description: "PostgreSQL 官方性能优化指南"
+    
+  - title: "SQL 反模式"
+    url: "https://use-the-index-luke.com/"
+    description: "学习常见的 SQL 错误模式和正确写法"
+    
+  - title: "EXPLAIN 详解"
+    url: "https://www.postgresql.org/docs/current/using-explain.html"
+    description: "理解查询执行计划和如何优化"

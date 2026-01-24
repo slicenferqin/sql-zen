@@ -1,0 +1,284 @@
+# schema/skills/common-queries.yaml
+# SQL 查询模式和最佳实践
+# 这个文档提供常见查询模式的示例和反模式
+
+query_patterns:
+  - name: "时间范围查询"
+    description: "如何正确处理时间范围过滤"
+    best_practices:
+      - "使用 >= 和 < 而不是 DATE() 函数（性能更好）"
+      - "时间范围用 BETWEEN 或 >= AND <"
+      - "注意时区问题，统一使用 UTC"
+      - "使用数据库特定的日期函数（PostgreSQL: DATE_TRUNC, MySQL: DATE_FORMAT）"
+    examples:
+      - description: "最近 30 天"
+        sql: "WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'"
+      - description: "上个月"
+        sql: |
+          WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+            AND created_at < DATE_TRUNC('month', CURRENT_DATE)
+      - description: "本月"
+        sql: |
+          WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
+            AND created_at < DATE_TRUNC('month', CURRENT_DATE + INTERVAL '1 month')
+      - description: "去年全年"
+        sql: |
+          WHERE created_at >= DATE_TRUNC('year', CURRENT_DATE - INTERVAL '1 year')
+            AND created_at < DATE_TRUNC('year', CURRENT_DATE)
+    common_mistakes:
+      - mistake: "WHERE DATE(created_at) = '2024-01-01'"
+        reason: "无法使用索引，性能差"
+        fix: "WHERE created_at >= '2024-01-01' AND created_at < '2024-01-02'"
+      - mistake: "WHERE created_at BETWEEN '2024-01-01' AND '2024-01-31'"
+        reason: "BETWEEN 包含边界，可能导致重复或遗漏"
+        fix: "WHERE created_at >= '2024-01-01' AND created_at < '2024-02-01'"
+
+  - name: "聚合查询"
+    description: "如何正确使用 GROUP BY 和聚合函数"
+    best_practices:
+      - "SELECT 中的非聚合列必须在 GROUP BY 中"
+      - "使用 HAVING 过滤聚合结果，不要用 WHERE"
+      - "注意 NULL 值的处理（COUNT vs COUNT(*)）"
+      - "合理使用聚合别名（AS）提高可读性"
+    examples:
+      - description: "按产品统计销售额"
+        sql: |
+          SELECT 
+            p.product_name,
+            COUNT(o.order_id) as order_count,
+            SUM(o.total_amount) as total_revenue,
+            AVG(o.total_amount) as avg_order_value
+          FROM orders o
+          INNER JOIN products p ON o.product_id = p.product_id
+          WHERE o.status = 'completed'
+          GROUP BY p.product_name
+          ORDER BY total_revenue DESC
+          LIMIT 10
+      - description: "每日订单量统计"
+        sql: |
+          SELECT
+            DATE_TRUNC('day', created_at) as order_date,
+            COUNT(*) as daily_orders,
+            SUM(total_amount) as daily_revenue
+          FROM orders
+          WHERE status = 'completed'
+          GROUP BY DATE_TRUNC('day', created_at)
+          ORDER BY order_date DESC
+      - description: "用户分层统计"
+        sql: |
+          SELECT
+            CASE 
+              WHEN total_orders >= 100 THEN 'VIP用户'
+              WHEN total_orders >= 50 THEN '核心用户'
+              WHEN total_orders >= 10 THEN '活跃用户'
+              ELSE '新用户'
+            END as user_tier,
+            COUNT(*) as user_count
+          FROM (
+            SELECT user_id, COUNT(*) as total_orders
+            FROM orders
+            GROUP BY user_id
+          ) user_stats
+          GROUP BY user_tier
+    common_mistakes:
+      - mistake: "SELECT product_name, COUNT(*), SUM(amount) GROUP BY product_name"
+        reason: "product_name 和 amount 都没在 GROUP BY 中（错误）"
+        fix: "SELECT product_name, COUNT(*), SUM(amount) GROUP BY product_name（正确）"
+        note: "PostgreSQL 允许，但其他数据库会报错。最佳实践是明确列出。"
+      - mistake: "SELECT user, SUM(orders) WHERE SUM(orders) > 100 GROUP BY user"
+        reason: "使用 WHERE 过滤聚合结果，应该用 HAVING"
+        fix: "SELECT user, SUM(orders) GROUP BY user HAVING SUM(orders) > 100"
+
+  - name: "JOIN 查询"
+    description: "如何正确使用 JOIN"
+    best_practices:
+      - "优先使用 INNER JOIN，除非明确需要 LEFT/RIGHT JOIN"
+      - "JOIN 条件放在 ON 子句，过滤条件放在 WHERE"
+      - "注意 JOIN 顺序，小表在前可以提升性能"
+      - "使用表别名简化查询，提高可读性"
+      - "多表 JOIN 时，明确关系避免笛卡尔积"
+    examples:
+      - description: "订单关联用户和产品"
+        sql: |
+          SELECT 
+            o.order_id,
+            u.user_name,
+            u.email,
+            p.product_name,
+            p.category,
+            o.total_amount,
+            o.status
+          FROM orders o
+          INNER JOIN users u ON o.user_id = u.user_id
+          INNER JOIN products p ON o.product_id = p.product_id
+          WHERE o.status = 'completed'
+          ORDER BY o.created_at DESC
+          LIMIT 100
+      - description: "多表 JOIN - 订单包含多个商品"
+        sql: |
+          SELECT 
+            o.order_id,
+            o.created_at,
+            JSON_AGG(
+              JSON_BUILD_OBJECT(
+                'product_name', p.product_name,
+                'quantity', oi.quantity,
+                'unit_price', oi.unit_price
+              )
+            ) as items
+          FROM orders o
+          INNER JOIN order_items oi ON o.order_id = oi.order_id
+          INNER JOIN products p ON oi.product_id = p.product_id
+          GROUP BY o.order_id, o.created_at
+          ORDER BY o.created_at DESC
+    common_mistakes:
+      - mistake: "WHERE o.user_id = u.id AND p.id = o.product_id"
+        reason: "JOIN 条件应该用 ON，不应该放在 WHERE"
+        fix: "INNER JOIN users u ON o.user_id = u.user_id INNER JOIN products p ON o.product_id = p.product_id"
+      - mistake: "忘记指定 JOIN 类型，默认为 CROSS JOIN"
+        reason: "会导致笛卡尔积，性能极差"
+        fix: "明确使用 INNER JOIN, LEFT JOIN 等"
+      - mistake: "JOIN 大表到小表"
+        reason: "性能较差"
+        fix: "重新排列 JOIN 顺序，小表在前"
+
+  - name: "排序和分页"
+    description: "如何正确使用 ORDER BY 和 LIMIT"
+    best_practices:
+      - "使用 ORDER BY 提供可预测的排序"
+      - "总是添加 LIMIT 避免返回过大数据集"
+      - "分页查询使用 OFFSET + LIMIT"
+      - "注意 NULL 值的排序（NULL 在 ORDER BY 中的位置）"
+    examples:
+      - description: "最新的 10 个订单"
+        sql: |
+          SELECT * FROM orders
+          ORDER BY created_at DESC
+          LIMIT 10
+      - description: "按销售额降序的产品"
+        sql: |
+          SELECT product_name, SUM(total_amount) as revenue
+          FROM orders
+          GROUP BY product_name
+          ORDER BY revenue DESC
+          LIMIT 20
+      - description: "分页查询（第 2 页，每页 20 条）"
+        sql: |
+          SELECT * FROM orders
+          ORDER BY created_at DESC
+          LIMIT 20 OFFSET 20
+    common_mistakes:
+      - mistake: "忘记 LIMIT，返回所有数据"
+        reason: "可能导致性能问题和超时"
+        fix: "总是添加合理的 LIMIT（默认 100）"
+      - mistake: "ORDER BY 和 LIMIT 顺序错误"
+        reason: "SQL 语法错误"
+        fix: "SELECT * FROM table ORDER BY column LIMIT n（正确顺序）"
+      - mistake: "使用 OFFSET 处理大数据集"
+        reason: "性能差，随着 OFFSET 增加而变慢"
+        fix: "大数据集分页使用游标或键值分页"
+
+  - name: "条件过滤"
+    description: "如何正确使用 WHERE 和条件"
+    best_practices:
+      - "使用 IN 代替多个 OR"
+      - "使用 BETWEEN 处理范围查询"
+      - "注意 NULL 值的处理（IS NULL, IS NOT NULL）"
+      - "使用括号明确逻辑优先级"
+    examples:
+      - description: "多个状态过滤（使用 IN）"
+        sql: |
+          SELECT * FROM orders
+          WHERE status IN ('completed', 'paid', 'shipped')
+      - description: "非 NULL 值过滤"
+        sql: |
+          SELECT * FROM orders
+          WHERE total_amount IS NOT NULL
+            AND user_id IS NOT NULL
+      - description: "复合条件"
+        sql: |
+          SELECT * FROM orders
+          WHERE status = 'completed'
+            AND created_at >= '2024-01-01'
+            AND total_amount > 100
+      - description: "NOT 条件"
+        sql: |
+          SELECT * FROM orders
+          WHERE status NOT IN ('cancelled', 'refunded')
+            AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+    common_mistakes:
+      - mistake: "WHERE status = 'completed' OR status = 'paid' OR status = 'shipped'"
+        reason: "多个 OR 性能差，使用 IN 更好"
+        fix: "WHERE status IN ('completed', 'paid', 'shipped')"
+      - mistake: "WHERE status = 'completed' AND created_at OR total_amount > 100"
+        reason: "逻辑错误，OR 的优先级高于 AND"
+        fix: "WHERE status = 'completed' AND (created_at OR total_amount > 100)"
+        note: "使用括号明确逻辑"
+      - mistake: "WHERE amount != NULL"
+        reason: "不标准的语法"
+        fix: "WHERE amount IS NOT NULL"
+
+  - name: "子查询"
+    description: "如何正确使用子查询"
+    best_practices:
+      - "子查询只返回必要的列（避免 SELECT *）"
+      - "考虑使用 JOIN 替代子查询（性能通常更好）"
+      - "使用 EXISTS 替代 IN 子查询"
+      - "注意子查询的执行次数（相关子查询 vs 非相关子查询）"
+    examples:
+      - description: "查找订单金额大于平均值的用户"
+        sql: |
+          SELECT 
+            u.user_id,
+            u.user_name,
+            AVG(o.total_amount) as avg_order_amount
+          FROM users u
+          INNER JOIN orders o ON u.user_id = o.user_id
+          GROUP BY u.user_id, u.user_name
+          HAVING AVG(o.total_amount) > (
+            SELECT AVG(total_amount)
+            FROM orders
+          )
+      - description: "使用 EXISTS 替代 IN"
+        sql: |
+          SELECT DISTINCT u.user_id, u.user_name
+          FROM users u
+          WHERE EXISTS (
+            SELECT 1 FROM orders o
+            WHERE o.user_id = u.user_id
+              AND o.status = 'completed'
+          )
+      - description: "子查询返回单列用于 IN"
+        sql: |
+          SELECT * FROM orders
+          WHERE product_id IN (
+            SELECT product_id FROM products
+            WHERE category = '电子数码'
+          )
+    common_mistakes:
+      - mistake: "SELECT * FROM (SELECT * FROM orders) as o"
+        reason: "子查询返回了不必要的列，性能差"
+        fix: "SELECT * FROM (SELECT order_id, user_id, product_id FROM orders) as o"
+      - mistake: "WHERE user_id IN (SELECT user_id FROM orders WHERE ...)"
+        reason: "相关子查询对每行执行一次，性能差"
+        fix: "WHERE EXISTS (SELECT 1 FROM orders o WHERE o.user_id = users.user_id AND ...)"
+
+# 性能优化提示
+
+performance_tips:
+  - tip: "避免 SELECT *"
+    description: "只查询需要的列，减少数据传输和内存使用"
+    example: "SELECT order_id, user_id, total_amount FROM orders"
+    
+  - tip: "使用索引"
+    description: "WHERE 和 JOIN 条件使用索引列"
+    note: "schema/tables/ 的 YAML 文件中会标明哪些列有索引"
+    
+  - tip: "限制结果集"
+    description: "使用 LIMIT 减少返回的数据量"
+    example: "SELECT ... LIMIT 100"
+    
+  - tip: "避免在 WHERE 中使用函数"
+    description: "函数无法使用索引，会导致全表扫描"
+    bad: "WHERE YEAR(created_at) = 2024"
+    good: "WHERE created_at >= '2024-01-01' AND created_at < '2025-01-01'"

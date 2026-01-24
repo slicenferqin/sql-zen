@@ -85,33 +85,32 @@ Vercel 将 15+ 工具精简为 2 个，获得了：
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Skills 层架构 (v0.2.0+)
+### 4.2 Agent Skills 集成 (v0.2.0+)
 
-**设计理念**: 在保持 2 个工具不变的前提下，通过 Skills 提供结构化指导
+**设计理念**: SQL-Zen 核心保持极简，通过 Agent Skills 开放标准提供可选的扩展
+
+**重要说明**: Agent Skills 不是 SQL-Zen 的内部组件，而是基于 [Agent Skills 开放标准](https://agentskills.io) 的用户扩展。
 
 ```
-SQL-Zen with Skills
-├── Core Tools (核心工具 - 不变)
+SQL-Zen 架构
+├── 核心层 (SQL-Zen 提供)
 │   ├── execute_bash: 执行 shell 命令
-│   └── execute_sql: 执行 SQL 查询
+│   ├── execute_sql: 执行 SQL 查询
+│   └── schema/: YAML 文件系统
 │
-├── Code Skills (代码技能 - TypeScript)
-│   ├── schema_exploration: 系统化探索 schema
-│   ├── sql_generation: 智能生成 SQL
-│   └── error_recovery: 错误处理和重试
-│
-└── Doc Skills (文档技能 - YAML)
-    └── schema/skills/
-        ├── common-queries.yaml: 常见查询模式
-        ├── best-practices.yaml: SQL 最佳实践
-        └── troubleshooting.yaml: 问题排查指南
+└── Skills 层 (用户可选创建)
+    ├── .claude/skills/sql-zen-explore/  # Agent Skill
+    ├── .claude/skills/sql-zen-query/    # Agent Skill
+    └── schema/skills/*.yaml              # 查询模式文档
 ```
 
 **关键特性**：
-- ✅ 保持极简：仍然只有 2 个工具
-- ✅ 可选增强：Skills 提供指导，不强制使用
-- ✅ 文档驱动：Skills 也是文档，可用 grep/cat 探索
-- ✅ 渐进引入：v0.1.0 无 Skills，v0.2.0 引入
+- ✅ 保持极简：核心仍然只有 2 个工具
+- ✅ 开放标准：遵循 Agent Skills 标准，跨工具兼容
+- ✅ 可选增强：Skills 是最佳实践封装，不是必需的
+- ✅ 社区驱动：用户可创建和分享 Skills
+
+**详细设计**: 参见 [Agent Skills 集成方案](./agent-skills-integration.md)
 
 ## 5. Schema 文件规范
 
@@ -134,9 +133,6 @@ schema/
 ├── examples/               # 示例 SQL
 │   ├── sales_queries.sql
 │   └── user_queries.sql
-└── README.md               # Schema 概览
-```
-
 └── README.md               # Schema 概览
 ```
 
@@ -238,81 +234,74 @@ measures:
 
 ## 7. Agent Skills 设计 (v0.2.0+)
 
-### 7.1 Skills 概念
+### 7.1 什么是 Agent Skills？
 
-**Agent Skills** 是可复用的能力模块，提供结构化的指导和最佳实践，帮助 Agent 更高效、更一致地完成任务。
+**Agent Skills** 是基于 [Agent Skills 开放标准](https://agentskills.io) 的扩展机制，由 Anthropic 发起，被多个 AI 工具支持（Claude Code, Cursor, VS Code 等）。
 
-**关键特性**：
-- 高层抽象：比单个 tool 更高层次
-- 可选使用：提供指导，不强制执行
-- 文档驱动：Skills 也是文档，符合文件系统理念
-- 保持极简：不增加工具数量
+**核心概念**：
+- Skills 是 **文件夹 + SKILL.md 文件**
+- SKILL.md 包含 **YAML frontmatter + Markdown 指令**
+- Agent 可以自动发现和使用 Skills
+- 每个 Skill 自动生成 `/skill-name` slash 命令
 
-### 7.2 Skills 类型
-
-#### 7.2.1 Code Skills (TypeScript)
-
-提供结构化的 prompt 模板和可选的辅助函数。
-
-```typescript
-interface AgentSkill {
-  name: string;
-  description: string;
-  category: string;
-  tools: string[];
-  promptTemplate: string;
-  examples?: Example[];
-}
+**文件结构**：
+```
+.claude/skills/sql-zen-explore/
+├── SKILL.md           # 主指令文件（必需）
+├── examples/          # 可选：示例
+└── scripts/           # 可选：脚本
 ```
 
-**核心 Skills**：
-1. `schema_exploration`: 系统化探索数据库结构
-2. `sql_generation`: 智能生成和优化 SQL
-3. `error_recovery`: 处理 SQL 错误和重试
+### 7.2 SQL-Zen 推荐的 Skills
 
-#### 7.2.2 Doc Skills (YAML)
+SQL-Zen 将提供 3 个核心 Skills 作为最佳实践：
 
-作为 schema 文档的一部分，可被 Agent 探索和参考。
+1. **sql-zen-explore**: 系统化探索 Schema 结构
+2. **sql-zen-query**: 智能生成 SQL 查询
+3. **sql-zen-analyze**: 分析查询结果
 
-```yaml
-# schema/skills/common-queries.yaml
-skills:
-  - name: "时间范围查询"
-    category: "query-patterns"
-    best_practices:
-      - "使用 >= 和 < 而不是 DATE() 函数"
-      - "注意时区问题"
-    examples:
-      - description: "最近 30 天"
-        sql: "WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'"
+这些 Skills 是 **可选的**，用户可以选择使用或不使用。
+
+### 7.3 Skills 与 SQL-Zen 核心的关系
+
+| 组件 | 类型 | 位置 | 必需性 |
+|------|------|------|--------|
+| SQL-Zen 核心 | 框架 | npm 包 | 必需 |
+| Agent Skills | 用户扩展 | `.claude/skills/` | 可选 |
+| Schema Skills 文档 | 文档 | `schema/skills/` | 推荐 |
+
+**工作流程**：
 ```
-
-### 7.3 Skills 使用流程
-
-```
-用户问题
+用户提问
     ↓
-Agent 选择合适的 Skill
+[可选] Agent 使用 /sql-zen-query skill
     ↓
-遵循 Skill 的 prompt 模板
+Skill 指导 Agent 使用 SQL-Zen 工具
     ↓
-参考 schema/skills/ 中的文档
+Agent 使用 execute_bash 探索 schema/
     ↓
-使用 execute_bash 和 execute_sql
+[可选] Agent 参考 schema/skills/common-queries.yaml
+    ↓
+Agent 使用 execute_sql 执行查询
     ↓
 返回结果
 ```
 
-### 7.4 Skills 优势
+### 7.4 Skills 的价值
 
-| 维度 | 无 Skills | 有 Skills | 改进 |
-|------|----------|-----------|------|
-| 一致性 | 依赖 LLM 每次推理 | 标准化流程 | +30-40% |
-| Token 效率 | 每次重复指导 | 复用模板 | +20-30% |
-| 成功率 | 不稳定 | 遵循最佳实践 | +25-35% |
-| 可维护性 | Prompt 臃肿 | 模块化 | +50% |
+**对用户**：
+- 标准化的工作流程
+- 最佳实践的封装
+- 减少重复的指令
+- 跨工具兼容（Claude Code, Cursor 等）
 
-**详细分析**: 参见 [Agent Skills 分析文档](./agent-skills-analysis.md)
+**对 SQL-Zen**：
+- 不增加核心复杂度
+- 保持 2 个工具的极简主义
+- 通过开放标准提供扩展性
+- 社区可贡献 Skills
+
+**详细设计**: 参见 [Agent Skills 集成方案](./agent-skills-integration.md)
 
 ## 8. 工具定义
 
