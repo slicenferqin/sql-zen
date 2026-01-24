@@ -139,10 +139,26 @@ columns:
 ## Features
 
 ### 已实现
-- [ ] CLI 工具 (`sql-zen ask`)
-- [ ] PostgreSQL 支持
-- [ ] YAML Schema 解析
-- [ ] Claude API 集成
+
+- [x] CLI 工具 (`sql-zen init`, `sql-zen ask`, `sql-zen validate`)
+- [x] PostgreSQL 支持
+- [x] YAML Schema 解析
+- [x] Claude API 集成
+- [x] execute_bash 工具实现
+- [x] execute_sql 工具实现
+- [x] Agent Skills 集成（3 个核心 Skills + Schema 文档）
+
+### 计划中
+
+- [ ] SQLite 支持
+- [ ] MySQL 支持
+- [ ] 多模型支持 (GPT-4, Ollama)
+- [ ] 交互式 REPL 模式
+- [ ] Web UI
+- [ ] Slack Bot 集成
+- [ ] Schema 自动生成 (`sql-zen schema import`)
+- [ ] 单元测试和集成测试
+
 
 ### 计划中
 - [ ] 多模型支持 (GPT-4, Ollama)
