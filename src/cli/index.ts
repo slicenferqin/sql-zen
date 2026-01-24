@@ -1,19 +1,17 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { readFileSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import chalk from 'chalk';
+import { promises as fs } from 'fs';
 import ora from 'ora';
 import { SQLZenAgent } from '../agent/core.js';
 import { SchemaParser } from '../schema/parser.js';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
 async function main() {
   const pkg = JSON.parse(
-    readFileSync(join(__dirname, '..', 'package.json'), 'utf-8')
+    await fs.readFile(
+      new URL('../package.json', import.meta.url),
+      'utf-8'
+    )
   );
 
   const program = new Command()
@@ -27,19 +25,18 @@ async function main() {
       const spinner = ora('Initializing SQL-Zen...').start();
       
       try {
-        const schemaDir = join(process.cwd(), 'schema');
+        const schemaDir = `${process.cwd()}/schema`;
         const dirs = ['tables', 'joins', 'measures', 'examples', 'skills'];
         
         for (const dir of dirs) {
-          const dirPath = join(schemaDir, dir);
-          const fs = await import('fs/promises');
+          const dirPath = `${schemaDir}/${dir}`;
           if (!await fs.access(dirPath).then(() => true).catch(() => false)) {
             await fs.mkdir(dirPath, { recursive: true });
           }
         }
 
-        const gitignorePath = join(schemaDir, '.gitignore');
-        await import('fs/promises').writeFile(
+        const gitignorePath = `${schemaDir}/.gitignore`;
+        await fs.writeFile(
           gitignorePath,
           '# Dependencies\nnode_modules/\n\n# Build output\ndist/\nbuild/\n\n# Environment variables\n.env\n.env.local\n.env.*.local\n\n# IDE\n.idea/\n.vscode/\n'
         );
@@ -87,7 +84,7 @@ async function main() {
       const spinner = ora('Validating schema...').start();
       
       try {
-        const schemaParser = new SchemaParser('schema');
+        const schemaParser = new SchemaParser(`${process.cwd()}/schema`);
         const isValid = await schemaParser.validateSchema();
         
         if (isValid) {
