@@ -1,0 +1,315 @@
+table:
+  name: products
+  description: |
+    商品表，存储所有商品的基本信息、库存、价格等数据。
+    
+    涵盖商品从创建到上架、销售、下架的全生命周期。
+    不包含商品变体（如不同颜色、尺寸），变体数据在 product_variants 表。
+    
+    数据范围：2020年1月至今，包含所有市场商品。
+    
+    常见场景：
+    - 分析商品销售表现
+    - 库存管理和预警
+    - 商品价格分析
+    - 商品分类和标签分析
+    
+  database: main_db
+  schema: public
+
+columns:
+  - name: id
+    type: BIGINT
+    description: "商品唯一标识符"
+    primary_key: true
+
+  - name: sku
+    type: VARCHAR(50)
+    description: |
+      商品 SKU（库存单位），唯一标识商品。
+      
+      格式：{category}-{product}-{variant}
+      示例：CLOTH-SHIRT-BLACK-L
+      约束：全局唯一，不可重复
+
+  - name: name
+    type: VARCHAR(255)
+    description: "商品名称，面向用户显示"
+
+  - name: description
+    type: TEXT
+    description: "商品详细描述，包含产品特性、使用方法等"
+
+  - name: category_id
+    type: INT
+    description: "关联商品分类的外键"
+    foreign_key:
+      table: categories
+      column: id
+
+  - name: brand_id
+    type: INT
+    description: "关联品牌的外键"
+    foreign_key:
+      table: brands
+      column: id
+
+  - name: price
+    type: DECIMAL(10,2)
+    description: |
+      商品标价。
+      
+      单位：USD
+      注意：实际售价可能有折扣，请参考 sale_price
+      典型范围：10 - 10000
+
+  - name: sale_price
+    type: DECIMAL(10,2)
+    description: |
+      商品促销价格。
+      
+      单位：USD
+      默认值等于 price，促销时降低
+      典型范围：5 - 5000
+
+  - name: cost_price
+    type: DECIMAL(10,2)
+    description: |
+      商品成本价，用于计算毛利。
+      
+      单位：USD
+      权限：仅内部可见
+      典型范围：5 - 3000
+
+  - name: currency
+    type: VARCHAR(3)
+    description: |
+      商品货币，使用 ISO 4217 代码。
+      
+      典型值：USD, EUR, CNY, JPY, GBP
+
+  - name: stock_quantity
+    type: INT
+    description: |
+      当前库存数量。
+      
+      最小值：0
+      典型范围：0 - 10000
+      用于：库存管理和预警
+
+  - name: stock_status
+    type: VARCHAR(20)
+    description: "库存状态"
+    enum:
+      - value: in_stock
+        description: "有库存"
+      - value: low_stock
+        description: "库存不足（< 10）"
+      - value: out_of_stock
+        description: "缺货"
+      - value: discontinued
+        description: "已停售"
+
+  - name: min_order_quantity
+    type: INT
+    description: "最小订购数量，用户一次购买的最小数量"
+    default: 1
+
+  - name: max_order_quantity
+    type: INT
+    description: "最大订购数量，用户一次购买的最大数量"
+    default: 999
+
+  - name: weight
+    type: DECIMAL(8,2)
+    description: |
+      商品重量（千克）。
+      
+      典型值：0.1 - 50
+      用于：计算运费
+
+  - name: dimensions
+    type: VARCHAR(100)
+    description: |
+      商品尺寸（长×宽×高，厘米）。
+      
+      格式：L×W×H
+      示例：30×20×10
+      用于：计算运费和仓储
+
+  - name: image_url
+    type: VARCHAR(500)
+    description: "商品主图 URL"
+
+  - name: images
+    type: JSON
+    description: |
+      商品图片列表，JSON 数组格式。
+      
+      格式：[{"url": "...", "alt": "..."}]
+
+  - name: tags
+    type: JSON
+    description: |
+      商品标签，JSON 数组格式。
+      
+      格式：["new", "hot", "recommended"]
+
+  - name: status
+    type: VARCHAR(20)
+    description: "商品状态"
+    enum:
+      - value: draft
+        description: "草稿，未上架"
+      - value: active
+        description: "已上架，可销售"
+      - value: inactive
+        description: "已下架，不可销售"
+      - value: archived
+        description: "已归档"
+
+  - name: visibility
+    type: VARCHAR(20)
+    description: "商品可见性"
+    enum:
+      - value: public
+        description: "公开，所有用户可见"
+      - value: private
+        description: "私有，仅特定用户可见"
+      - value: hidden
+        description: "隐藏，仅管理员可见"
+
+  - name: is_featured
+    type: BOOLEAN
+    description: "是否为推荐商品，会在首页推荐位显示"
+
+  - name: is_digital
+    type: BOOLEAN
+    description: "是否为数字商品（如电子书、软件），不需要物流配送"
+
+  - name: requires_shipping
+    type: BOOLEAN
+    description: "是否需要物流配送"
+
+  - name: shipping_class
+    type: VARCHAR(50)
+    description: "物流分类，决定运费计算方式"
+    enum:
+      - value: standard
+        description: "标准物流"
+      - value: express
+        description: "加急物流"
+      - value: oversized
+        description: "超大件物流"
+
+  - name: tax_class
+    type: VARCHAR(50)
+    description: "税费分类，决定税率"
+    enum:
+      - value: standard
+        description: "标准税率"
+      - value: reduced
+        description: "优惠税率"
+      - value: zero
+        description: "零税率"
+
+  - name: meta_title
+    type: VARCHAR(100)
+    description: "SEO 标题"
+
+  - name: meta_description
+    type: VARCHAR(255)
+    description: "SEO 描述"
+
+  - name: view_count
+    type: INT
+    description: "商品浏览次数"
+
+  - name: purchase_count
+    type: INT
+    description: "商品购买次数"
+
+  - name: rating
+    type: DECIMAL(2,1)
+    description: |
+      商品平均评分。
+      
+      范围：0.0 - 5.0
+      典型值：4.0 - 5.0
+
+  - name: review_count
+    type: INT
+    description: "商品评论数量"
+
+  - name: created_at
+    type: TIMESTAMP
+    description: "商品创建时间"
+
+  - name: updated_at
+    type: TIMESTAMP
+    description: "商品最后更新时间"
+
+  - name: published_at
+    type: TIMESTAMP
+    description: "商品上架时间"
+
+common_filters:
+  - name: active_products
+    sql: "status = 'active' AND visibility = 'public'"
+    description: "已上架且公开的商品"
+
+  - name: in_stock_products
+    sql: "stock_status = 'in_stock' AND stock_quantity > 0"
+    description: "有库存的商品"
+
+  - name: low_stock_products
+    sql: "stock_status = 'low_stock'"
+    description: "库存不足的商品"
+
+  - name: featured_products
+    sql: "is_featured = true"
+    description: "推荐商品"
+
+  - name: digital_products
+    sql: "is_digital = true"
+    description: "数字商品"
+
+  - name: products_on_sale
+    sql: "sale_price < price"
+    description: "促销中的商品"
+
+measures:
+  - name: total_products
+    sql: "COUNT(*)"
+    description: "总商品数，包含所有状态的商品"
+    filters: []
+
+  - name: active_products_count
+    sql: "COUNT(*)"
+    description: "已上架商品数"
+    filters: ["status = 'active'", "visibility = 'public'"]
+
+  - name: total_stock_value
+    sql: "SUM(cost_price * stock_quantity)"
+    description: "总库存价值（成本价）"
+    filters: []
+
+  - name: low_stock_count
+    sql: "COUNT(*)"
+    description: "库存不足商品数"
+    filters: ["stock_status = 'low_stock'"]
+
+  - name: out_of_stock_count
+    sql: "COUNT(*)"
+    description: "缺货商品数"
+    filters: ["stock_status = 'out_of_stock'"]
+
+  - name: average_price
+    sql: "AVG(price)"
+    description: "平均商品价格"
+    filters: ["status = 'active'"]
+
+  - name: average_rating
+    sql: "AVG(rating)"
+    description: "平均商品评分"
+    filters: ["rating > 0"]

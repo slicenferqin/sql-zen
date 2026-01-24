@@ -1,0 +1,22 @@
+relationship:
+  name: user_orders
+  from_table: users
+  to_table: orders
+  type: one_to_many
+  join_sql: "LEFT JOIN orders ON users.id = orders.user_id"
+  description: |
+    用户和订单的一对多关系。
+    
+    每个用户可以有多个订单，每个订单属于一个用户。
+    关联字段：users.id → orders.user_id
+    
+    常见使用场景：
+    - 查询用户的所有订单
+    - 分析用户购买行为
+    - 计算用户相关指标（订单数、总金额、平均客单价）
+    - 用户生命周期分析
+    
+    示例查询：
+    - 获取用户的订单列表
+    - 计算用户的总消费金额
+    - 分析用户购买频率

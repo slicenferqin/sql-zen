@@ -1,0 +1,163 @@
+table:
+  name: order_items
+  description: |
+    订单明细表，存储每个订单的商品明细信息。
+    
+    每个订单可以包含多个商品明细，与 orders 表是一对多关系。
+    
+    数据范围：2020年1月至今，与订单表一致。
+    
+    常见场景：
+    - 分析商品购买频次和金额
+    - 订单客单价分析（商品数量分布）
+    - 商品组合分析（一起购买的商品）
+    - 退换货分析
+    
+  database: main_db
+  schema: public
+
+columns:
+  - name: id
+    type: BIGINT
+    description: "订单明细唯一标识符"
+    primary_key: true
+
+  - name: order_id
+    type: BIGINT
+    description: "关联订单的唯一标识"
+    foreign_key:
+      table: orders
+      column: id
+
+  - name: product_id
+    type: BIGINT
+    description: "关联商品的唯一标识"
+    foreign_key:
+      table: products
+      column: id
+
+  - name: variant_id
+    type: BIGINT
+    description: "关联商品变体的标识（如不同颜色、尺寸）"
+    foreign_key:
+      table: product_variants
+      column: id
+
+  - name: sku
+    type: VARCHAR(50)
+    description: |
+      商品 SKU（库存单位），唯一标识商品变体。
+      
+      格式：{category}-{product}-{variant}
+      示例：CLOTH-SHIRT-BLACK-L
+      约束：全局唯一
+
+  - name: product_name
+    type: VARCHAR(255)
+    description: "商品名称，冗余存储以提升查询性能"
+
+  - name: variant_name
+    type: VARCHAR(100)
+    description: "变体名称，如颜色、尺寸"
+    examples:
+      - "黑色 / L码"
+      - "红色 / M码"
+
+  - name: quantity
+    type: INT
+    description: |
+      购买数量。
+      
+      最小值：1
+      最大值：999
+      典型值：1-5
+      单位：件
+
+  - name: unit_price
+    type: DECIMAL(10,2)
+    description: |
+      商品单价，下单时的实际价格。
+      
+      单位：USD
+      注意：此价格可能不同于商品当前价格
+      用于：计算小计金额
+
+  - name: discount_amount
+    type: DECIMAL(10,2)
+    description: |
+      单件商品的优惠金额。
+      
+      单位：USD
+      计算：原价 - 单价
+
+  - name: total_amount
+    type: DECIMAL(12,2)
+    description: |
+      商品小计金额，数量乘以单价。
+      
+      单位：USD
+      计算公式：quantity × unit_price
+
+  - name: cost_price
+    type: DECIMAL(10,2)
+    description: |
+      商品成本价，用于计算毛利。
+      
+      单位：USD
+      权限：仅内部可见
+      用途：计算毛利率
+
+  - name: gross_profit
+    type: DECIMAL(10,2)
+    description: |
+      单件商品毛利。
+      
+      单位：USD
+      计算：unit_price - cost_price
+
+  - name: is_returned
+    type: BOOLEAN
+    description: "是否已退货"
+
+  - name: returned_quantity
+    type: INT
+    description: "已退货数量，0 表示未退货"
+    default: 0
+
+  - name: returned_at
+    type: TIMESTAMP
+    description: "退货时间"
+    
+  - name: notes
+    type: TEXT
+    description: "备注信息"
+
+common_filters:
+  - name: returned_items
+    sql: "is_returned = true"
+    description: "已退货的商品"
+
+  - name: high_quantity_items
+    sql: "quantity >= 10"
+    description: "购买数量大于等于10的商品"
+
+measures:
+  - name: total_items_sold
+    sql: "SUM(quantity)"
+    description: "总销售商品数量"
+    filters: []
+
+  - name: total_gross_profit
+    sql: "SUM(gross_profit * quantity)"
+    description: "总毛利金额"
+    filters: []
+
+  - name: return_rate
+    sql: "AVG(CASE WHEN is_returned = true THEN 1 ELSE 0 END)"
+    description: "商品退货率"
+    filters: []
+
+  - name: average_quantity_per_order
+    sql: "AVG(quantity)"
+    description: "平均每单商品数量"
+    filters: []

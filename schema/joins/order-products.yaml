@@ -1,0 +1,29 @@
+relationship:
+  name: order_products
+  from_table: orders
+  to_table: products
+  type: many_to_many
+  join_sql: |
+    INNER JOIN order_items ON orders.id = order_items.order_id
+    INNER JOIN products ON order_items.product_id = products.id
+  description: |
+    订单和商品的多对多关系。
+    
+    一个订单可以包含多个商品，一个商品可以出现在多个订单中。
+    通过 order_items 关联表实现多对多关系。
+    
+    关联路径：orders → order_items → products
+    关联字段：
+    - orders.id → order_items.order_id
+    - order_items.product_id → products.id
+    
+    常见使用场景：
+    - 查询订单中的商品详情
+    - 查询商品的所有订单
+    - 分析商品购买频次
+    - 商品组合分析（一起购买的商品）
+    
+    示例查询：
+    - 获取订单的商品明细
+    - 分析商品销售趋势
+    - 计算商品相关指标（销量、销售额、毛利）

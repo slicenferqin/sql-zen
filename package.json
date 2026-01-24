@@ -26,6 +26,7 @@
     "agent",
     "database",
     "postgresql",
+    "mysql",
     "sqlite",
     "cli",
     "natural-language"
@@ -55,6 +56,7 @@
     "js-yaml": "^4.1.0",
     "commander": "^12.1.0",
     "pg": "^8.13.0",
+    "mysql2": "^3.7.0",
     "better-sqlite3": "^9.4.0",
     "chalk": "^5.4.0",
     "ora": "^8.1.0",

@@ -1,0 +1,192 @@
+table:
+  name: users
+  description: |
+    用户表，存储所有注册用户的基本信息和账户状态。
+    
+    涵盖用户注册、身份验证、账户配置等信息。
+    不包含用户的订单、支付等交易数据，这些数据在相关表中。
+    
+    数据范围：2020年1月至今，包含所有市场的用户。
+    
+    常见场景：
+    - 分析用户注册趋势和活跃度
+    - 用户分层和画像分析
+    - 用户生命周期管理
+    
+  database: main_db
+  schema: public
+
+columns:
+  - name: id
+    type: BIGINT
+    description: "用户唯一标识符"
+    primary_key: true
+
+  - name: email
+    type: VARCHAR(255)
+    description: |
+      用户邮箱地址，用于登录和通知。
+      
+      格式：标准邮箱格式
+      约束：全局唯一，注册时验证
+      典型值：user@example.com
+
+  - name: username
+    type: VARCHAR(50)
+    description: |
+      用户名，用于显示和登录。
+      
+      格式：3-20个字符，字母数字和下划线
+      约束：全局唯一
+      典型值：john_doe_2024
+
+  - name: password_hash
+    type: VARCHAR(255)
+    description: |
+      用户密码的哈希值，使用 bcrypt 加密。
+      
+      注意：从不存储明文密码
+      加密方式：bcrypt (cost factor 10)
+
+  - name: full_name
+    type: VARCHAR(100)
+    description: |
+      用户全名，用于显示和称呼。
+      
+      格式：名 + 姓（或本地化格式）
+      典型值：张三, John Smith
+
+  - name: date_of_birth
+    type: DATE
+    description: |
+      用户出生日期，用于年龄验证和个性化推荐。
+      
+      格式：YYYY-MM-DD
+      约束：必须是过去日期
+      典型值：1990-05-15
+
+  - name: gender
+    type: VARCHAR(20)
+    description: "用户性别，用于个性化推荐和统计分析"
+    enum:
+      - value: male
+        description: "男性"
+      - value: female
+        description: "女性"
+      - value: other
+        description: "其他"
+      - value: prefer_not_to_say
+        description: "不愿透露"
+
+  - name: country
+    type: VARCHAR(2)
+    description: |
+      用户所在国家，使用 ISO 3166-1 alpha-2 代码。
+      
+      典型值：US, CN, JP, GB, DE
+
+  - name: timezone
+    type: VARCHAR(50)
+    description: |
+      用户时区，用于本地化时间显示。
+      
+      格式：IANA 时区标识符
+      典型值：America/New_York, Asia/Shanghai
+
+  - name: language
+    type: VARCHAR(10)
+    description: |
+      用户首选语言，用于界面本地化。
+      
+      格式：ISO 639-1 语言代码
+      典型值：en, zh, ja, es
+
+  - name: status
+    type: VARCHAR(20)
+    description: "用户账户状态，反映用户的可用性"
+    enum:
+      - value: active
+        description: "活跃用户，可以正常使用系统"
+      - value: inactive
+        description: "非活跃用户，超过6个月未登录"
+      - value: suspended
+        description: "暂停用户，违反了平台规则"
+      - value: deleted
+        description: "已删除用户，保留数据用于合规"
+
+  - name: subscription_tier
+    type: VARCHAR(20)
+    description: "用户订阅等级，决定可用的功能和权益"
+    enum:
+      - value: free
+        description: "免费用户，基础功能"
+      - value: basic
+        description: "基础订阅，标准功能"
+      - value: premium
+        description: "高级订阅，完整功能"
+
+  - name: is_verified
+    type: BOOLEAN
+    description: |
+      用户是否已验证邮箱或手机。
+      
+      true = 已通过验证，可以使用全部功能
+      false = 未验证，功能受限
+
+  - name: last_login_at
+    type: TIMESTAMP
+    description: |
+      用户最后一次成功登录的时间。
+      
+      时区：UTC
+      用于：判断用户活跃度
+
+  - name: created_at
+    type: TIMESTAMP
+    description: |
+      用户账户创建时间。
+      
+      时区：UTC
+      用于：用户增长分析、用户生命周期分析
+
+  - name: updated_at
+    type: TIMESTAMP
+    description: |
+      用户信息最后一次更新时间。
+      
+      时区：UTC
+      用于：追踪用户信息变更
+
+common_filters:
+  - name: active_users
+    sql: "status = 'active' AND is_verified = true"
+    description: "筛选活跃且已验证的用户"
+
+  - name: new_users_last_30_days
+    sql: "created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)"
+    description: "最近30天注册的新用户"
+
+  - name: inactive_users
+    sql: "last_login_at < DATE_SUB(CURRENT_DATE, INTERVAL 180 DAY)"
+    description: "超过180天未登录的非活跃用户"
+
+measures:
+  - name: total_users
+    sql: "COUNT(*)"
+    description: "总用户数，包含所有状态的用户"
+    filters: []
+
+  - name: active_users_count
+    sql: "COUNT(*)"
+    description: "活跃用户数，当前活跃且已验证的用户"
+    filters: ["status = 'active'", "is_verified = true"]
+
+  - name: new_users_this_month
+    sql: "COUNT(*)"
+    description: "本月新增用户数"
+    filters: ["created_at >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')"]
+
+  - name: verified_rate
+    sql: "AVG(CASE WHEN is_verified = true THEN 1 ELSE 0 END)"
+    description: "用户验证率，已验证用户占比"
+    filters: []

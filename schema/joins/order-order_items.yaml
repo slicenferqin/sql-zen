@@ -1,0 +1,23 @@
+relationship:
+  name: order_items_join
+  from_table: orders
+  to_table: order_items
+  type: one_to_many
+  join_sql: "INNER JOIN order_items ON orders.id = order_items.order_id"
+  description: |
+    订单和订单明细的一对多关系。
+    
+    每个订单可以有多个明细项，每个明细项属于一个订单。
+    
+    关联字段：orders.id → order_items.order_id
+    
+    常见使用场景：
+    - 查询订单的商品明细
+    - 计算订单总金额
+    - 统计订单商品数量
+    - 分析订单构成
+    
+    示例查询：
+    - 获取订单的商品列表
+    - 计算订单总金额
+    - 分析订单商品分布

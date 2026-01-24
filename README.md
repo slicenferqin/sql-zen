@@ -142,30 +142,23 @@ columns:
 
 - [x] CLI 工具 (`sql-zen init`, `sql-zen ask`, `sql-zen validate`)
 - [x] PostgreSQL 支持
+- [x] MySQL 支持
+- [x] SQLite 支持
 - [x] YAML Schema 解析
 - [x] Claude API 集成
 - [x] execute_bash 工具实现
 - [x] execute_sql 工具实现
 - [x] Agent Skills 集成（3 个核心 Skills + Schema 文档）
+- [x] 完整的 Schema 设计指南文档
 
 ### 计划中
 
-- [ ] SQLite 支持
-- [ ] MySQL 支持
 - [ ] 多模型支持 (GPT-4, Ollama)
 - [ ] 交互式 REPL 模式
 - [ ] Web UI
 - [ ] Slack Bot 集成
 - [ ] Schema 自动生成 (`sql-zen schema import`)
 - [ ] 单元测试和集成测试
-
-
-### 计划中
-- [ ] 多模型支持 (GPT-4, Ollama)
-- [ ] Schema 自动生成 (`sql-zen schema import`)
-- [ ] 交互式 REPL 模式
-- [ ] Web UI
-- [ ] Slack Bot 集成
 
 查看完整 [Roadmap](./docs/roadmap.md)
 
@@ -174,11 +167,20 @@ columns:
 ```bash
 # 必需：LLM API Key
 export ANTHROPIC_API_KEY="sk-ant-..."
-# 或
-export OPENAI_API_KEY="sk-..."
 
-# 必需：数据库连接
+# 必需：数据库连接（根据数据库类型选择）
+
+# PostgreSQL
+export DATABASE_TYPE="postgresql"
 export DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"
+
+# MySQL
+export DATABASE_TYPE="mysql"
+export DATABASE_URL="mysql://user:pass@localhost:3306/mydb"
+
+# SQLite
+export DATABASE_TYPE="sqlite"
+export DATABASE_URL="/path/to/database.db"
 
 # 可选：模型选择（默认 claude-sonnet-4-20250514）
 export SQL_ZEN_MODEL="claude-sonnet-4-20250514"
@@ -186,11 +188,28 @@ export SQL_ZEN_MODEL="claude-sonnet-4-20250514"
 
 ## Documentation
 
+### 核心文档
+
 - [设计文档](./docs/design.md) - 架构设计和技术决策
 - [调研报告](./docs/research-text-to-sql-solutions.md) - 主流方案对比分析
 - [Roadmap](./docs/roadmap.md) - 版本规划和迭代计划
 - [开发者指南](./AGENTS.md) - AI Agent 开发指南
 - [Vercel 博客参考](./docs/references/vercel-blog-we-removed-80-percent-of-our-agents-tools.md) - 灵感来源
+
+### Schema 设计指南
+
+- [Schema README](./schema/README.md) - Schema 目录概览
+- [Schema 设计方法论](./schema/guides/schema-methodology.md) - 设计原则和最佳实践
+- [表设计示例](./schema/guides/table-design.md) - 完整的表定义示例
+- [列命名规范](./schema/guides/column-naming.md) - 命名规范和约定
+- [关系设计模式](./schema/guides/relationship-design.md) - 表间关系建模
+- [SQL 最佳实践](./schema/guides/sql-best-practices.md) - 查询优化和规范
+
+### Agent Skills
+
+- [sql-zen-explore](./agentskills/sql-zen-explore.md) - 系统化探索 Schema
+- [sql-zen-query](./agentskills/sql-zen-query.md) - 高质量 SQL 生成
+- [sql-zen-analyze](./agentskills/sql-zen-analyze.md) - 数据分析洞察
 
 ## Philosophy
 
