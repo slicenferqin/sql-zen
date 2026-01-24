@@ -41,9 +41,17 @@
 
 ### v0.2.0 - 增强版 (预计 2 周)
 
-**目标**: 提升可用性和稳定性
+**目标**: 提升可用性和稳定性，引入 Agent Skills
 
 #### 功能增强
+
+- [ ] **Agent Skills 系统** (新增)
+  - [ ] Skills 架构设计和实现
+  - [ ] 核心 Code Skills (schema_exploration, sql_generation, error_recovery)
+  - [ ] Doc Skills 文档 (common-queries.yaml, best-practices.yaml)
+  - [ ] Skills 使用指南和示例
+  - [ ] Skills 效果对比测试
+
 - [ ] 多模型支持
   - [ ] OpenAI GPT-4
   - [ ] 本地模型 (Ollama)
@@ -64,9 +72,15 @@
   - [ ] ClickHouse 连接器
 
 #### 交付物
+- **Agent Skills 系统** (核心新增)
 - 多模型支持
 - Schema 自动生成工具
 - 安全沙箱环境
+
+**Skills 预期效果**:
+- Token 消耗减少 20-30%
+- 查询成功率提升 25-35%
+- 执行步骤减少 40%
 
 ---
 

@@ -48,6 +48,8 @@ Vercel 将 15+ 工具精简为 2 个，获得了：
 
 ## 4. 系统架构
 
+### 4.1 整体架构
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        SQL-Zen                               │
@@ -61,10 +63,11 @@ Vercel 将 15+ 工具精简为 2 个，获得了：
 │   ┌─────────────────────────────────────────────┐            │
 │   │              LLM Agent Core                  │            │
 │   │  ┌─────────────────────────────────────┐    │            │
-│   │  │  System Prompt                       │    │            │
+│   │  │  System Prompt + Skills             │    │            │
 │   │  │  - 角色定义                          │    │            │
 │   │  │  - Schema 目录结构说明               │    │            │
 │   │  │  - 工具使用指南                      │    │            │
+│   │  │  - Skills 使用指南 (v0.2.0+)        │    │            │
 │   │  └─────────────────────────────────────┘    │            │
 │   │                                              │            │
 │   │  ┌─────────────┐    ┌─────────────┐         │            │
@@ -76,10 +79,39 @@ Vercel 将 15+ 工具精简为 2 个，获得了：
 │   ┌─────────────────┐  ┌─────────────────┐                   │
 │   │  Sandbox 环境    │  │   数据库连接     │                   │
 │   │  (Schema 文件)   │  │  (执行 SQL)     │                   │
+│   │  + Skills 文档   │  │                 │                   │
 │   └─────────────────┘  └─────────────────┘                   │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+### 4.2 Skills 层架构 (v0.2.0+)
+
+**设计理念**: 在保持 2 个工具不变的前提下，通过 Skills 提供结构化指导
+
+```
+SQL-Zen with Skills
+├── Core Tools (核心工具 - 不变)
+│   ├── execute_bash: 执行 shell 命令
+│   └── execute_sql: 执行 SQL 查询
+│
+├── Code Skills (代码技能 - TypeScript)
+│   ├── schema_exploration: 系统化探索 schema
+│   ├── sql_generation: 智能生成 SQL
+│   └── error_recovery: 错误处理和重试
+│
+└── Doc Skills (文档技能 - YAML)
+    └── schema/skills/
+        ├── common-queries.yaml: 常见查询模式
+        ├── best-practices.yaml: SQL 最佳实践
+        └── troubleshooting.yaml: 问题排查指南
+```
+
+**关键特性**：
+- ✅ 保持极简：仍然只有 2 个工具
+- ✅ 可选增强：Skills 提供指导，不强制使用
+- ✅ 文档驱动：Skills 也是文档，可用 grep/cat 探索
+- ✅ 渐进引入：v0.1.0 无 Skills，v0.2.0 引入
 
 ## 5. Schema 文件规范
 
@@ -95,9 +127,16 @@ schema/
 │   └── relationships.yaml
 ├── measures/               # 常用度量定义
 │   └── metrics.yaml
+├── skills/                 # Skills 文档 (v0.2.0+)
+│   ├── common-queries.yaml
+│   ├── best-practices.yaml
+│   └── troubleshooting.yaml
 ├── examples/               # 示例 SQL
 │   ├── sales_queries.sql
 │   └── user_queries.sql
+└── README.md               # Schema 概览
+```
+
 └── README.md               # Schema 概览
 ```
 
@@ -197,9 +236,100 @@ measures:
     description: "平均订单金额"
 ```
 
-## 6. 工具定义
+## 7. Agent Skills 设计 (v0.2.0+)
 
-### 6.1 execute_bash
+### 7.1 Skills 概念
+
+**Agent Skills** 是可复用的能力模块，提供结构化的指导和最佳实践，帮助 Agent 更高效、更一致地完成任务。
+
+**关键特性**：
+- 高层抽象：比单个 tool 更高层次
+- 可选使用：提供指导，不强制执行
+- 文档驱动：Skills 也是文档，符合文件系统理念
+- 保持极简：不增加工具数量
+
+### 7.2 Skills 类型
+
+#### 7.2.1 Code Skills (TypeScript)
+
+提供结构化的 prompt 模板和可选的辅助函数。
+
+```typescript
+interface AgentSkill {
+  name: string;
+  description: string;
+  category: string;
+  tools: string[];
+  promptTemplate: string;
+  examples?: Example[];
+}
+```
+
+**核心 Skills**：
+1. `schema_exploration`: 系统化探索数据库结构
+2. `sql_generation`: 智能生成和优化 SQL
+3. `error_recovery`: 处理 SQL 错误和重试
+
+#### 7.2.2 Doc Skills (YAML)
+
+作为 schema 文档的一部分，可被 Agent 探索和参考。
+
+```yaml
+# schema/skills/common-queries.yaml
+skills:
+  - name: "时间范围查询"
+    category: "query-patterns"
+    best_practices:
+      - "使用 >= 和 < 而不是 DATE() 函数"
+      - "注意时区问题"
+    examples:
+      - description: "最近 30 天"
+        sql: "WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'"
+```
+
+### 7.3 Skills 使用流程
+
+```
+用户问题
+    ↓
+Agent 选择合适的 Skill
+    ↓
+遵循 Skill 的 prompt 模板
+    ↓
+参考 schema/skills/ 中的文档
+    ↓
+使用 execute_bash 和 execute_sql
+    ↓
+返回结果
+```
+
+### 7.4 Skills 优势
+
+| 维度 | 无 Skills | 有 Skills | 改进 |
+|------|----------|-----------|------|
+| 一致性 | 依赖 LLM 每次推理 | 标准化流程 | +30-40% |
+| Token 效率 | 每次重复指导 | 复用模板 | +20-30% |
+| 成功率 | 不稳定 | 遵循最佳实践 | +25-35% |
+| 可维护性 | Prompt 臃肿 | 模块化 | +50% |
+
+**详细分析**: 参见 [Agent Skills 分析文档](./agent-skills-analysis.md)
+
+## 8. 工具定义
+
+### 8.1 execute_bash
+
+```typescript
+interface ExecuteBashTool {
+  name: "execute_bash";
+  description: "在 Schema 目录中执行 shell 命令，用于探索和理解数据结构";
+  parameters: {
+    command: string;  // 要执行的命令，如 "ls schema/tables/" 或 "grep -r 'user_id' schema/"
+  };
+  allowed_commands: ["ls", "cat", "grep", "find", "head", "tail", "wc"];
+}
+```
+
+### 8.2 execute_sql
 
 ```typescript
 interface ExecuteBashTool {
