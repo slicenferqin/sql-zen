@@ -4,7 +4,7 @@
 
 **SQL-Zen** 是一个极简主义的 Text-to-SQL Agent，让你用自然语言查询数据库。
 
-受 [Vercel d0 项目](./docs/references/vercel-blog-we-removed-80-percent-of-our-agents-tools.md) 启发，我们采用"文件系统驱动"的架构：**只用 2 个工具，替代传统方案的 15+ 个工具**，反而获得更好的效果。
+采用**双层语义架构**：**Schema 层**描述表结构，**Cube 层**定义业务指标。
 
 ## Why SQL-Zen?
 
@@ -13,33 +13,42 @@
 | 问题 | 传统方案 | SQL-Zen |
 |------|----------|---------|
 | 工具数量 | 15+ 个专用工具 | **2 个** |
-| 架构复杂度 | 复杂的 RAG + 多轮验证 | **文件系统 + LLM** |
+| 架构复杂度 | 复杂的 RAG + 多轮验证 | **双层语义层** |
+| 语义表达 | 依赖数据库结构 | **Cube 层定义业务指标** |
 | 维护成本 | 每个边界情况都要打补丁 | **让模型自己处理** |
 | 模型依赖 | 每次更新都要重新调整 | **信任模型推理能力** |
 
-**核心理念**：不要替模型思考，给它好的上下文，让它自己探索。
+**核心理念**：不要替模型思考，给它好的语义上下文，让它自己探索。
 
-## 与主流方案对比
+## 双层语义架构
 
-我们调研了 8 个主流的开源 Text-to-SQL 方案（Vanna AI, DB-GPT, SQLCoder, Langchain 等），发现它们都存在相似的问题：
+```
+┌─────────────────────────────────────────┐
+│          Cube 层（业务语义）           │
+│  - 业务指标（收入、转化率、CLV）       │
+│  - 维度（时间、地理、用户）             │
+│  - 跨表计算逻辑                    │
+└────────────┬────────────────────────────┘
+             │ 引用
+             ▼
+┌─────────────────────────────────────────┐
+│          Schema 层（表结构）          │
+│  - 表定义（orders, users, products）     │
+│  - 列定义（类型、约束）                 │
+│  - 表间关系                            │
+└────────────┬────────────────────────────┘
+             │ 映射
+             ▼
+┌─────────────────────────────────────────┐
+│          物理数据库                     │
+│  (PostgreSQL, MySQL, SQLite)            │
+└─────────────────────────────────────────┘
+```
 
-| 对比维度 | 主流方案 | SQL-Zen | 优势 |
-|---------|---------|---------|------|
-| **工具数量** | 10-20 个专用工具 | **2 个** | 减少 87% 的工具，降低复杂度 |
-| **架构** | RAG + 向量数据库 + Multi-Agent | **文件系统 + LLM** | 无需额外依赖，维护成本极低 |
-| **Schema 管理** | 数据库自动提取 + 向量检索 | **YAML 文件 + grep/cat/ls** | 版本控制友好，文档即代码 |
-| **学习曲线** | 陡峭（需理解 RAG、向量数据库等） | **平缓**（熟悉的 Unix 工具） | 开发者友好 |
-| **Token 效率** | 工具定义占用大量 token | **高效**（简单工具定义） | 预计减少 30-40% token 消耗 |
-| **灵活性** | 受工具限制，需为边界情况打补丁 | **模型自由推理** | 信任 LLM 能力，适应性强 |
-
-### 我们的差异化优势
-
-1. **极简主义** - 用 Unix 哲学重新思考 Text-to-SQL，证明"Less Tools, More Intelligence"
-2. **文件系统驱动** - 利用 50 年历史的 grep/cat/ls，无需学习新工具
-3. **高质量文档** - 强制要求详细的 YAML Schema，文档质量 > 工具数量
-4. **为未来构建** - 不为当前模型的局限性打补丁，为更强的模型构建基础设施
-
-📊 **详细对比分析**: 查看完整的 [Text-to-SQL 方案调研报告](./docs/research-text-to-sql-solutions.md)，了解我们如何在 8 个主流方案中找到差异化定位。
+**优势**：
+- **业务语义优先**：用户用"收入"、"转化率"而非 `SUM(amount)` 提问
+- **复用计算逻辑**：复杂的业务逻辑只定义一次，多处复用
+- **隐藏复杂性**：底层数据结构变化不影响业务语义
 
 ## Quick Start
 
@@ -47,91 +56,144 @@
 # 安装
 npm install -g sql-zen
 
-# 初始化项目（生成 schema 目录）
+# 初始化项目
 sql-zen init
 
 # 配置数据库连接
+export DATABASE_TYPE="postgresql"
 export DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"
 
-# 开始提问
-sql-zen ask "上个月销售额最高的 10 个产品是什么？"
+# 开始提问（使用业务术语）
+sql-zen ask "上个月收入是多少？"
+sql-zen ask "哪个用户群组的转化率最高？"
+sql-zen ask "上周客户生命周期价值（CLV）是多少？"
 ```
 
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  "上个月销售额最高的 10 个产品是什么？"                    │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-                         ▼
-┌──────────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────┐
+│  "上个月收入是多少？"                         │
+└────────────────────────┬─────────────────────────┘
+                          │
+                          ▼
+┌──────────────────────────────────────────────────┐
 │                    LLM Agent                             │
 │  ┌────────────────┐    ┌────────────────┐                │
 │  │  execute_bash  │    │  execute_sql   │                │
 │  │  grep/cat/ls   │    │  运行 SQL      │                │
+│  │  探索 Cube 层   │    │               │                │
 │  └───────┬────────┘    └───────┬────────┘                │
 └──────────┼─────────────────────┼─────────────────────────┘
-           │                     │
-           ▼                     ▼
+            │                     │
+            ▼                     ▼
 ┌──────────────────┐    ┌──────────────────┐
-│  Schema 文件系统  │    │     数据库       │
-│  (YAML/Markdown) │    │  (PostgreSQL)   │
+│  Cube 文件系统  │    │     数据库       │
+│  (业务语义层)    │    │  (PostgreSQL)   │
 └──────────────────┘    └──────────────────┘
 ```
 
 **Agent 的工作流程**：
 
-1. 收到用户问题
-2. 用 `ls` 查看 schema 目录结构
-3. 用 `cat` 读取相关表定义
-4. 用 `grep` 搜索关联关系
+1. 收到用户问题（如"上个月收入"）
+2. 在 **Cube 层**找到 `revenue` 指标定义
+3. 理解 `revenue` 的 SQL 表达式（如 `SUM(CASE WHEN ...)`）
+4. 在 **Schema 层**找到表结构
 5. 生成 SQL 并用 `execute_sql` 执行
 6. 返回结果和解释
 
 ## Schema 文件结构
 
-SQL-Zen 的核心是高质量的 Schema 文档：
+SQL-Zen 的核心是高质量的语义文档：
 
 ```
 schema/
-├── tables/              # 表定义
+├── cubes/               # Cube 层（业务语义）
+│   ├── business-metrics.yaml
+│   ├── user-analytics.yaml
+│   └── product-analytics.yaml
+├── tables/              # Schema 层（表结构）
 │   ├── orders.yaml
 │   ├── users.yaml
 │   └── products.yaml
 ├── joins/               # 关联关系
-│   └── relationships.yaml
-├── measures/            # 常用度量
-│   └── metrics.yaml
+│   ├── user-orders.yaml
+│   └── order-products.yaml
+├── guides/              # 设计指南
+│   ├── schema-methodology.md
+│   ├── cube-design.md
+│   └── ...
 ├── examples/            # 示例 SQL
-│   └── common_queries.sql
-└── README.md            # Schema 概览
+│   ├── daily-revenue.sql
+│   └── user-clv.sql
+└── README.md
 ```
 
-**表定义示例** (`schema/tables/orders.yaml`)：
+### Cube 层示例
 
 ```yaml
+# schema/cubes/business-metrics.yaml
+cube: business_analytics
+description: "核心业务指标"
+
+dimensions:
+  - name: time
+    description: "时间维度"
+    column: "DATE(orders.created_at)"
+    granularity:
+      - month
+      - week
+      - day
+
+metrics:
+  - name: revenue
+    description: "总收入，包含已支付订单的金额"
+    sql: "SUM(CASE WHEN orders.status = 'paid' THEN orders.total_amount END)"
+    type: sum
+    
+  - name: conversion_rate
+    description: "转化率，从注册到首次购买的比例"
+    sql: |
+      COUNT(DISTINCT CASE WHEN o.status = 'paid' THEN o.user_id END)::DECIMAL / 
+      COUNT(DISTINCT u.id) * 100
+    type: percentage
+    
+  - name: customer_lifetime_value
+    description: "客户生命周期价值（CLV）"
+    sql: "SUM(orders.total_amount) / COUNT(DISTINCT orders.user_id)"
+    type: avg
+
+filters:
+  - name: last_30_days
+    sql: "orders.created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)"
+    description: "最近30天"
+```
+
+### Schema 层示例
+
+```yaml
+# schema/tables/orders.yaml
 table:
   name: orders
   description: "订单主表，记录所有用户订单信息"
   
 columns:
   - name: order_id
-    type: string
+    type: BIGINT
     description: "订单唯一标识"
     primary_key: true
     
   - name: user_id
-    type: string
+    type: BIGINT
     description: "用户ID，关联 users 表"
     foreign_key: users.user_id
     
   - name: total_amount
-    type: decimal
+    type: DECIMAL(12,2)
     description: "订单总金额（单位：元）"
     
   - name: status
-    type: string
+    type: VARCHAR(50)
     description: "订单状态"
     enum: [pending, paid, shipped, completed, cancelled]
 ```
@@ -140,24 +202,25 @@ columns:
 
 ### 已实现
 
+- [x] 双层语义架构（Schema 层 + Cube 层）
 - [x] CLI 工具 (`sql-zen init`, `sql-zen ask`, `sql-zen validate`)
 - [x] PostgreSQL 支持
 - [x] MySQL 支持
 - [x] SQLite 支持
-- [x] YAML Schema 解析
 - [x] Claude API 集成
 - [x] execute_bash 工具实现
 - [x] execute_sql 工具实现
-- [x] Agent Skills 集成（3 个核心 Skills + Schema 文档）
-- [x] 完整的 Schema 设计指南文档
+- [x] Agent Skills 集成（3 个核心 Skills）
+- [x] 完整的设计指南文档
+- [x] 高质量 Schema 示例
 
 ### 计划中
 
+- [ ] Cube 层验证工具
+- [ ] 查询结果缓存
 - [ ] 多模型支持 (GPT-4, Ollama)
 - [ ] 交互式 REPL 模式
 - [ ] Web UI
-- [ ] Slack Bot 集成
-- [ ] Schema 自动生成 (`sql-zen schema import`)
 - [ ] 单元测试和集成测试
 
 查看完整 [Roadmap](./docs/roadmap.md)
@@ -190,11 +253,9 @@ export SQL_ZEN_MODEL="claude-sonnet-4-20250514"
 
 ### 核心文档
 
-- [设计文档](./docs/design.md) - 架构设计和技术决策
-- [调研报告](./docs/research-text-to-sql-solutions.md) - 主流方案对比分析
+- [设计文档](./docs/design.md) - 架构设计和技术决策（包含双层语义架构）
 - [Roadmap](./docs/roadmap.md) - 版本规划和迭代计划
 - [开发者指南](./AGENTS.md) - AI Agent 开发指南
-- [Vercel 博客参考](./docs/references/vercel-blog-we-removed-80-percent-of-our-agents-tools.md) - 灵感来源
 
 ### Schema 设计指南
 
@@ -207,21 +268,22 @@ export SQL_ZEN_MODEL="claude-sonnet-4-20250514"
 
 ### Agent Skills
 
-- [sql-zen-explore](./agentskills/sql-zen-explore.md) - 系统化探索 Schema
-- [sql-zen-query](./agentskills/sql-zen-query.md) - 高质量 SQL 生成
+- [sql-zen-explore](./agentskills/sql-zen-explore.md) - 系统化探索 Schema 和 Cube
+- [sql-zen-query](./agentskills/sql-zen-query.md) - 基于 Cube 层生成高质量 SQL
 - [sql-zen-analyze](./agentskills/sql-zen-analyze.md) - 数据分析洞察
 
 ## Philosophy
 
-> "The best agents might be the ones with the fewest tools."
+> "The best agents might be ones with the fewest tools."
 > — Vercel Engineering
 
 我们相信：
 
-1. **文件系统是最好的抽象** - grep 已经 50 年了，依然好用
-2. **信任模型的推理能力** - 不要过度约束
-3. **文档质量 > 工具数量** - 好的 Schema 文档是成功的基础
-4. **为未来的模型构建** - 模型进步比工具迭代更快
+1. **双层语义层是最好的抽象** - Schema 层描述结构，Cube 层描述业务
+2. **文件系统是最稳定的载体** - grep 已经 50 年了，依然好用
+3. **信任模型的推理能力** - 不要过度约束
+4. **业务语义 > 工具数量** - 好的 Cube 定义是成功的基础
+5. **为未来的模型构建** - 模型进步比工具迭代更快
 
 ## Contributing
 
