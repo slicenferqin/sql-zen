@@ -1,0 +1,64 @@
+{
+  "name": "sql-zen",
+  "version": "0.1.0",
+  "description": "> Less Tools, More Intelligence - A minimalist Text-to-SQL Agent",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "sql-zen": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "sql",
+    "text-to-sql",
+    "agent",
+    "database",
+    "postgresql",
+    "sqlite",
+    "cli"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/slicenferqin/sql-zen.git"
+  },
+  "bugs": {
+    "url": "https://github.com/slicenferqin/sql-zen/issues"
+  },
+  "homepage": "https://github.com/slicenferqin/sql-zen#readme",
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.4.0"
+    "husky": "^9.1.0",
+    "lint-staged": "^15.2.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "js-yaml": "^4.1.0",
+    "commander": "^12.1.0",
+    "pg": "^8.13.0",
+    "better-sqlite3": "^9.4.0",
+    "chalk": "^5.4.0",
+    "ora": "^8.1.0",
+    "cli-table3": "^0.6.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
