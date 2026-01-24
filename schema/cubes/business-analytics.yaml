@@ -1,0 +1,172 @@
+cube: business_analytics
+description: |
+  核心业务分析 Cube，包含收入、订单、用户增长等关键指标。
+  
+  适用于：
+  - 财务分析
+  - 运营监控
+  - 用户增长分析
+  - 产品表现分析
+
+dimensions:
+  - name: time
+    description: "时间维度，支持不同粒度的时间聚合"
+    column: "DATE(orders.created_at)"
+    granularity:
+      - year:
+          sql: "YEAR(orders.created_at)"
+          description: "年"
+      - quarter:
+          sql: "QUARTER(orders.created_at)"
+          description: "季度"
+      - month:
+          sql: "DATE_FORMAT(orders.created_at, '%Y-%m')"
+          description: "月"
+      - week:
+          sql: "YEARWEEK(orders.created_at)"
+          description: "周"
+      - day:
+          sql: "DATE(orders.created_at)"
+          description: "日"
+          
+  - name: user_tier
+    description: "用户分层维度，根据订阅等级区分"
+    column: "users.subscription_tier"
+    enum: [free, basic, premium]
+    
+  - name: geography
+    description: "地理维度，支持国家和地区分析"
+    columns:
+      - "orders.shipping_country"
+      - "orders.shipping_state"
+      - "users.country"
+      
+  - name: product_category
+    description: "产品分类维度"
+    column: "products.category_id"
+
+metrics:
+  - name: revenue
+    description: "总收入，包含所有已支付订单的金额"
+    sql: "SUM(CASE WHEN orders.status = 'paid' THEN orders.total_amount END)"
+    type: sum
+    category: financial
+    unit: "USD"
+    
+  - name: net_revenue
+    description: "净收入，扣除退款后的实际收入"
+    sql: "SUM(orders.total_amount - COALESCE(orders.refunded_amount, 0))"
+    type: sum
+    category: financial
+    unit: "USD"
+    
+  - name: total_orders
+    description: "总订单数"
+    sql: "COUNT(orders.id)"
+    type: count
+    category: operational
+    
+  - name: average_order_value
+    description: "平均客单价（AOV），每个订单的平均金额"
+    sql: "AVG(orders.total_amount)"
+    type: avg
+    category: financial
+    unit: "USD"
+    
+  - name: customer_lifetime_value
+    description: "客户生命周期价值（CLV），单个客户的平均消费金额"
+    sql: "SUM(orders.total_amount) / COUNT(DISTINCT orders.user_id)"
+    type: avg
+    category: customer
+    unit: "USD"
+    
+  - name: conversion_rate
+    description: "转化率，从注册到首次购买的比例"
+    sql: |
+      COUNT(DISTINCT CASE WHEN orders.status = 'paid' THEN orders.user_id END)::DECIMAL / 
+      COUNT(DISTINCT users.id) * 100
+    type: percentage
+    category: growth
+    unit: "%"
+    
+  - name: repeat_purchase_rate
+    description: "复购率，有多次购买的用户比例"
+    sql: |
+      SUM(CASE WHEN order_count > 1 THEN 1 ELSE 0 END)::DECIMAL / 
+      COUNT(DISTINCT orders.user_id) * 100
+    type: percentage
+    category: customer
+    unit: "%"
+    
+  - name: return_rate
+    description: "退货率，退款金额占总收入的比例"
+    sql: |
+      COALESCE(SUM(orders.refunded_amount), 0) * 100 / 
+      SUM(CASE WHEN orders.status = 'paid' THEN orders.total_amount END)
+    type: percentage
+    category: operational
+    unit: "%"
+
+joins:
+  - from: orders
+    to: users
+    type: left
+    condition: "orders.user_id = users.id"
+    description: "订单关联用户，用于用户相关的指标"
+    
+  - from: orders
+    to: order_items
+    type: inner
+    condition: "orders.id = order_items.order_id"
+    description: "订单关联明细，用于产品相关的指标"
+    
+  - from: order_items
+    to: products
+    type: inner
+    condition: "order_items.product_id = products.id"
+    description: "明细关联产品，用于产品分析"
+
+filters:
+  - name: last_30_days
+    sql: "orders.created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 30 DAY)"
+    description: "最近30天"
+    dimension: time
+    
+  - name: last_7_days
+    sql: "orders.created_at >= DATE_SUB(CURRENT_DATE, INTERVAL 7 DAY)"
+    description: "最近7天"
+    dimension: time
+    
+  - name: last_month
+    sql: "orders.created_at >= DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')"
+    description: "本月"
+    dimension: time
+    
+  - name: last_quarter
+    sql: "QUARTER(orders.created_at) = QUARTER(CURRENT_DATE) AND YEAR(orders.created_at) = YEAR(CURRENT_DATE)"
+    description: "本季度"
+    dimension: time
+    
+  - name: paid_orders_only
+    sql: "orders.status IN ('paid', 'delivered')"
+    description: "已支付订单"
+    
+  - name: active_users
+    sql: "users.status = 'active' AND users.is_verified = true"
+    description: "活跃用户"
+    dimension: user
+    
+  - name: premium_users
+    sql: "users.subscription_tier = 'premium'"
+    description: "高级订阅用户"
+    dimension: user
+    
+  - name: domestic_orders
+    sql: "orders.shipping_country = 'US'"
+    description: "国内订单"
+    dimension: geography
+    
+  - name: international_orders
+    sql: "orders.shipping_country != 'US'"
+    description: "国际订单"
+    dimension: geography
