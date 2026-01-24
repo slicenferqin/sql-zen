@@ -6,6 +6,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import chalk from 'chalk';
 import ora from 'ora';
+import { SQLZenAgent } from '../agent/core.js';
+import { SchemaParser } from '../schema/parser.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,28 +24,89 @@ async function main() {
   program
     .command('init', 'Initialize SQL-Zen project')
     .action(async () => {
-      console.log(chalk.blue('✨ Initializing SQL-Zen project...'));
-      // TODO: Implement init command
-      console.log(chalk.green('✓ Project initialized'));
+      const spinner = ora('Initializing SQL-Zen...').start();
+      
+      try {
+        const schemaDir = join(process.cwd(), 'schema');
+        const dirs = ['tables', 'joins', 'measures', 'examples', 'skills'];
+        
+        for (const dir of dirs) {
+          const dirPath = join(schemaDir, dir);
+          const fs = await import('fs/promises');
+          if (!await fs.access(dirPath).then(() => true).catch(() => false)) {
+            await fs.mkdir(dirPath, { recursive: true });
+          }
+        }
+
+        const gitignorePath = join(schemaDir, '.gitignore');
+        await import('fs/promises').writeFile(
+          gitignorePath,
+          '# Dependencies\nnode_modules/\n\n# Build output\ndist/\nbuild/\n\n# Environment variables\n.env\n.env.local\n.env.*.local\n\n# IDE\n.idea/\n.vscode/\n'
+        );
+
+        spinner.succeed('SQL-Zen project initialized successfully!');
+        console.log(chalk.green('✓ Project initialized'));
+        console.log(chalk.gray('Schema directory: schema/'));
+        console.log(chalk.gray('Run "sql-zen ask \\"your question\\"" to start querying'));
+      } catch (error) {
+        spinner.fail(`Failed to initialize: ${error.message}`);
+        console.error(chalk.red(error.message));
+        process.exit(1);
+      }
     });
 
   program
     .command('ask <question>', 'Ask a question to query the database')
     .action(async (question) => {
-      console.log(chalk.blue(`🤖 Processing: ${question}`));
-      // TODO: Implement ask command
-      console.log(chalk.green('✓ Query processed'));
+      const spinner = ora('Processing query...').start();
+      
+      try {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) {
+          throw new Error('ANTHROPIC_API_KEY environment variable is required. Set it with:\n  export ANTHROPIC_API_KEY=sk-ant-...');
+        }
+
+        const agent = new SQLZenAgent(apiKey);
+        await agent.initialize();
+
+        const response = await agent.processQuery(question);
+        
+        spinner.succeed('Query processed successfully!');
+        console.log(chalk.green('✓ Query processed'));
+        console.log(chalk.white(response));
+      } catch (error) {
+        spinner.fail(`Query failed: ${error.message}`);
+        console.error(chalk.red(error.message));
+        process.exit(1);
+      }
     });
 
   program
     .command('validate', 'Validate schema files')
     .action(async () => {
-      console.log(chalk.blue('🔍 Validating schema files...'));
-      // TODO: Implement validate command
-      console.log(chalk.green('✓ Schema validated'));
+      const spinner = ora('Validating schema...').start();
+      
+      try {
+        const schemaParser = new SchemaParser('schema');
+        const isValid = await schemaParser.validateSchema();
+        
+        if (isValid) {
+          spinner.succeed('Schema is valid!');
+          console.log(chalk.green('✓ Schema validated'));
+        } else {
+          spinner.fail('Schema validation failed');
+          console.log(chalk.red('✗ Schema validation failed'));
+          process.exit(1);
+        }
+      } catch (error) {
+        spinner.fail(`Validation failed: ${error.message}`);
+        console.error(chalk.red(error.message));
+        process.exit(1);
+      }
     });
 
   program.parse();
 }
 
 main().catch(console.error);
+
