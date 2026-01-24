@@ -1,0 +1,93 @@
+# 示例表定义：订单表
+# 这是一个示例文件，展示 SQL-Zen 的 Schema 格式
+
+table:
+  name: orders
+  description: "订单主表，记录所有用户订单信息"
+  database: analytics
+  schema: public
+  
+columns:
+  - name: order_id
+    type: string
+    description: "订单唯一标识"
+    primary_key: true
+    examples: ["ORD-2024-001", "ORD-2024-002"]
+    
+  - name: user_id
+    type: string
+    description: "用户ID，关联 users 表"
+    foreign_key: 
+      table: users
+      column: user_id
+    
+  - name: product_id
+    type: string
+    description: "产品ID，关联 products 表"
+    foreign_key:
+      table: products
+      column: product_id
+    
+  - name: quantity
+    type: integer
+    description: "购买数量"
+    
+  - name: unit_price
+    type: decimal(10,2)
+    description: "单价（单位：元）"
+    
+  - name: total_amount
+    type: decimal(10,2)
+    description: "订单总金额（单位：元）"
+    formula: "quantity * unit_price"
+    
+  - name: status
+    type: string
+    description: "订单状态"
+    enum: 
+      - value: pending
+        description: "待支付"
+      - value: paid
+        description: "已支付"
+      - value: shipped
+        description: "已发货"
+      - value: completed
+        description: "已完成"
+      - value: cancelled
+        description: "已取消"
+    
+  - name: created_at
+    type: timestamp
+    description: "订单创建时间"
+    
+  - name: updated_at
+    type: timestamp
+    description: "订单更新时间"
+
+# 常用过滤条件
+common_filters:
+  - name: recent_orders
+    sql: "created_at >= CURRENT_DATE - INTERVAL '30 days'"
+    description: "最近30天的订单"
+    
+  - name: completed_orders
+    sql: "status = 'completed'"
+    description: "已完成的订单"
+    
+  - name: valid_orders
+    sql: "status NOT IN ('cancelled')"
+    description: "有效订单（排除已取消）"
+
+# 常用度量
+measures:
+  - name: total_revenue
+    sql: "SUM(total_amount)"
+    description: "总收入"
+    
+  - name: order_count
+    sql: "COUNT(DISTINCT order_id)"
+    description: "订单数量"
+    
+  - name: avg_order_value
+    sql: "AVG(total_amount)"
+    description: "平均订单金额"
