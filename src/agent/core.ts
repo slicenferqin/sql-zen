@@ -17,37 +17,55 @@ export interface AgentOptions {
   };
 }
 
+export interface AgentDependencies {
+  anthropicClient?: Anthropic;
+  bashTool?: BashTool;
+  dbConnection?: mysql.Connection;
+  mysqlModule?: typeof mysql;
+}
+
 export class SQLZenAgent {
   private anthropic: Anthropic;
   private bashTool: BashTool;
   private dbConnection: mysql.Connection | null = null;
   private model: string;
+  private mysqlModule: typeof mysql;
 
-  constructor(options: AgentOptions = {}) {
-    const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY || '';
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY environment variable is required');
+  constructor(options: AgentOptions = {}, dependencies?: AgentDependencies) {
+    // 如果提供了依赖注入，使用注入的对象
+    if (dependencies?.anthropicClient) {
+      this.anthropic = dependencies.anthropicClient;
+    } else {
+      const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY || '';
+      if (!apiKey) {
+        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+      }
+
+      const baseURL = options.baseURL || process.env.ANTHROPIC_BASE_URL;
+
+      this.anthropic = new Anthropic({
+        apiKey: apiKey,
+        ...(baseURL ? { baseURL } : {})
+      });
     }
 
-    const baseURL = options.baseURL || process.env.ANTHROPIC_BASE_URL;
-
-    this.anthropic = new Anthropic({
-      apiKey: apiKey,
-      ...(baseURL ? { baseURL } : {})
-    });
-
     this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-    this.bashTool = new BashTool();
+    this.bashTool = dependencies?.bashTool || new BashTool();
+    this.dbConnection = dependencies?.dbConnection || null;
+    this.mysqlModule = dependencies?.mysqlModule || mysql;
   }
 
   async initialize(dbConfig: { database: string; host?: string; port?: number; user?: string; password?: string; ssl?: boolean }): Promise<void> {
-    this.dbConnection = await mysql.createConnection({
-      host: dbConfig.host || 'localhost',
-      port: dbConfig.port || 3306,
-      database: dbConfig.database,
-      user: dbConfig.user || 'root',
-      password: dbConfig.password || '',
-    });
+    // 如果已经有连接（通过依赖注入），则跳过
+    if (!this.dbConnection) {
+      this.dbConnection = await this.mysqlModule.createConnection({
+        host: dbConfig.host || 'localhost',
+        port: dbConfig.port || 3306,
+        database: dbConfig.database,
+        user: dbConfig.user || 'root',
+        password: dbConfig.password || '',
+      });
+    }
     console.log('Agent initialized');
   }
 

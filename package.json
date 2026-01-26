@@ -12,8 +12,14 @@
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write 'src/**/*.ts'",
-    "test": "echo 'Error: no test specified' && exit 1",
-    "prepare": "npm run build"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:ci": "jest --ci --coverage --maxWorkers=2",
+    "prepare": "npm run build",
+    "video:preview": "remotion studio video/src/index.ts",
+    "video:render": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo.mp4",
+    "video:render:gif": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo.gif --image-format=png"
   },
   "files": [
     "dist",
@@ -42,14 +48,21 @@
   },
   "homepage": "https://github.com/slicenferqin/sql-zen#readme",
   "devDependencies": {
+    "@jest/globals": "^30.2.0",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/jest": "^30.0.0",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
     "@types/pg": "^8.16.0",
+    "jest": "^30.2.0",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
+    "@remotion/cli": "^4.0.409",
+    "@remotion/transitions": "^4.0.409",
     "better-sqlite3": "^9.4.0",
     "chalk": "^5.4.0",
     "cli-table3": "^0.6.4",
@@ -58,7 +71,8 @@
     "js-yaml": "^4.1.0",
     "mysql2": "^3.7.0",
     "ora": "^8.1.0",
-    "pg": "^8.13.0"
+    "pg": "^8.13.0",
+    "remotion": "^4.0.409"
   },
   "engines": {
     "node": ">=18.0.0"
