@@ -5,14 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "sql-zen": "./dist/cli.js"
+    "sql-zen": "./dist/cli/index.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "format": "prettier --write 'src/**/*.ts'",
+    "test": "echo 'Error: no test specified' && exit 1",
     "prepare": "npm run build"
   },
   "files": [
@@ -42,25 +42,23 @@
   },
   "homepage": "https://github.com/slicenferqin/sql-zen#readme",
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.10.0",
-    "typescript": "^5.7.0",
-    "eslint": "^9.0.0",
-    "prettier": "^3.4.0",
-    "husky": "^9.1.0",
-    "lint-staged": "^15.2.0",
-    "@typescript-eslint/eslint-plugin": "^8.0.0",
-    "@typescript-eslint/parser": "^8.0.0"
+    "@types/pg": "^8.16.0",
+    "typescript": "^5.7.0"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
-    "js-yaml": "^4.1.0",
-    "commander": "^12.1.0",
-    "pg": "^8.13.0",
-    "mysql2": "^3.7.0",
     "better-sqlite3": "^9.4.0",
     "chalk": "^5.4.0",
+    "cli-table3": "^0.6.4",
+    "commander": "^12.1.0",
+    "dotenv": "^17.2.3",
+    "js-yaml": "^4.1.0",
+    "mysql2": "^3.7.0",
     "ora": "^8.1.0",
-    "cli-table3": "^0.6.4"
+    "pg": "^8.13.0"
   },
   "engines": {
     "node": ">=18.0.0"

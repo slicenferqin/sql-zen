@@ -1,0 +1,102 @@
+cube: business_metrics
+description: "核心业务指标 - 收入、订单、用户相关"
+
+dimensions:
+  - name: time
+    description: "时间维度，基于订单创建时间"
+    column: "orders.created_at"
+    granularity:
+      - day:
+          sql: "DATE(orders.created_at)"
+          description: "按天"
+      - week:
+          sql: "DATE_TRUNC('week', orders.created_at)"
+          description: "按周"
+      - month:
+          sql: "DATE_TRUNC('month', orders.created_at)"
+          description: "按月"
+      - year:
+          sql: "DATE_TRUNC('year', orders.created_at)"
+          description: "按年"
+
+  - name: city
+    description: "城市维度，用户所在城市"
+    column: "users.city"
+    join: "JOIN users ON orders.user_id = users.id"
+
+  - name: category
+    description: "商品类别维度"
+    column: "products.category"
+    join: |
+      JOIN order_items ON orders.id = order_items.order_id
+      JOIN products ON order_items.product_id = products.id
+
+  - name: payment_method
+    description: "支付方式维度"
+    column: "orders.payment_method"
+
+metrics:
+  - name: revenue
+    description: "总收入 - 已支付和已完成订单的总金额"
+    sql: "SUM(CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.total_amount ELSE 0 END)"
+    type: sum
+    unit: "元"
+
+  - name: total_orders
+    description: "总订单数"
+    sql: "COUNT(DISTINCT orders.id)"
+    type: count
+
+  - name: paid_orders
+    description: "已支付订单数"
+    sql: "COUNT(DISTINCT CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.id END)"
+    type: count
+
+  - name: avg_order_value
+    description: "平均订单金额 (AOV)"
+    sql: |
+      SUM(CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.total_amount ELSE 0 END) /
+      NULLIF(COUNT(DISTINCT CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.id END), 0)
+    type: avg
+    unit: "元"
+
+  - name: order_completion_rate
+    description: "订单完成率"
+    sql: |
+      COUNT(DISTINCT CASE WHEN orders.status = 'completed' THEN orders.id END)::DECIMAL /
+      NULLIF(COUNT(DISTINCT orders.id), 0) * 100
+    type: percentage
+    unit: "%"
+
+  - name: cancellation_rate
+    description: "订单取消率"
+    sql: |
+      COUNT(DISTINCT CASE WHEN orders.status = 'cancelled' THEN orders.id END)::DECIMAL /
+      NULLIF(COUNT(DISTINCT orders.id), 0) * 100
+    type: percentage
+    unit: "%"
+
+filters:
+  - name: last_7_days
+    sql: "orders.created_at >= CURRENT_DATE - INTERVAL '7 days'"
+    description: "最近7天"
+
+  - name: last_30_days
+    sql: "orders.created_at >= CURRENT_DATE - INTERVAL '30 days'"
+    description: "最近30天"
+
+  - name: last_90_days
+    sql: "orders.created_at >= CURRENT_DATE - INTERVAL '90 days'"
+    description: "最近90天"
+
+  - name: this_month
+    sql: "DATE_TRUNC('month', orders.created_at) = DATE_TRUNC('month', CURRENT_DATE)"
+    description: "本月"
+
+  - name: last_month
+    sql: "DATE_TRUNC('month', orders.created_at) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')"
+    description: "上月"
+
+  - name: paid_only
+    sql: "orders.status IN ('paid', 'shipped', 'completed')"
+    description: "仅已支付订单"

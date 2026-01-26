@@ -1,0 +1,43 @@
+# 表间关系定义
+relationships:
+  - name: user_orders
+    description: "用户和订单的关系"
+    from: users
+    to: orders
+    type: one_to_many
+    join: "users.id = orders.user_id"
+    
+  - name: order_items_relation
+    description: "订单和订单明细的关系"
+    from: orders
+    to: order_items
+    type: one_to_many
+    join: "orders.id = order_items.order_id"
+    
+  - name: product_order_items
+    description: "商品和订单明细的关系"
+    from: products
+    to: order_items
+    type: one_to_many
+    join: "products.id = order_items.product_id"
+
+common_joins: |
+  # 常用 JOIN 模式
+  
+  ## 查询用户订单
+  SELECT u.*, o.*
+  FROM users u
+  JOIN orders o ON u.id = o.user_id
+  
+  ## 查询订单商品
+  SELECT o.*, oi.*, p.*
+  FROM orders o
+  JOIN order_items oi ON o.id = oi.order_id
+  JOIN products p ON oi.product_id = p.id
+  
+  ## 查询用户购买的商品
+  SELECT u.name, p.name, oi.quantity
+  FROM users u
+  JOIN orders o ON u.id = o.user_id
+  JOIN order_items oi ON o.id = oi.order_id
+  JOIN products p ON oi.product_id = p.id

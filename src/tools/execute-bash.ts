@@ -21,6 +21,7 @@ export class BashTool {
     if (!ALLOWED_COMMANDS.includes(commandName)) {
       return {
         success: false,
+        output: '',
         error: `Command '${commandName}' is not allowed. Allowed commands: ${ALLOWED_COMMANDS.join(', ')}`
       };
     }
@@ -33,6 +34,7 @@ export class BashTool {
         if (error) {
           resolve({
             success: false,
+            output: '',
             error: error.message
           });
         } else {

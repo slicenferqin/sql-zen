@@ -1,0 +1,62 @@
+table:
+  name: orders
+  description: "订单表，记录所有用户订单"
+
+columns:
+  - name: id
+    type: SERIAL
+    description: "订单唯一标识"
+    primary_key: true
+    
+  - name: user_id
+    type: INTEGER
+    description: "下单用户ID"
+    foreign_key: users.id
+    
+  - name: total_amount
+    type: DECIMAL(12, 2)
+    description: "订单总金额（单位：元）"
+    
+  - name: status
+    type: VARCHAR(20)
+    description: "订单状态"
+    enum: [pending, paid, shipped, completed, cancelled]
+    default: "pending"
+    
+  - name: payment_method
+    type: VARCHAR(50)
+    description: "支付方式"
+    enum: [alipay, wechat, credit_card, bank_transfer]
+    nullable: true
+    
+  - name: shipping_address
+    type: TEXT
+    description: "收货地址"
+    
+  - name: created_at
+    type: TIMESTAMP
+    description: "下单时间"
+    
+  - name: paid_at
+    type: TIMESTAMP
+    description: "支付时间"
+    nullable: true
+    
+  - name: shipped_at
+    type: TIMESTAMP
+    description: "发货时间"
+    nullable: true
+    
+  - name: completed_at
+    type: TIMESTAMP
+    description: "完成时间"
+    nullable: true
+
+business_context: |
+  订单是核心业务实体。订单状态流转：pending -> paid -> shipped -> completed。
+  cancelled 表示已取消的订单。
+  
+  重要业务规则：
+  - 只有 status='paid' 或 status='completed' 的订单才计入收入
+  - total_amount 是订单总金额，包含所有商品
+  - 一个订单可以包含多个商品（通过 order_items 表关联）

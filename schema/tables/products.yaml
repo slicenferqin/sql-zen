@@ -1,0 +1,46 @@
+table:
+  name: products
+  description: "商品表，存储所有在售商品信息"
+
+columns:
+  - name: id
+    type: SERIAL
+    description: "商品唯一标识"
+    primary_key: true
+    
+  - name: name
+    type: VARCHAR(200)
+    description: "商品名称"
+    
+  - name: category
+    type: VARCHAR(50)
+    description: "商品类别"
+    enum: [电子产品, 服装, 食品, 家居, 图书]
+    
+  - name: price
+    type: DECIMAL(10, 2)
+    description: "销售价格（单位：元）"
+    
+  - name: cost
+    type: DECIMAL(10, 2)
+    description: "成本价格（单位：元）"
+    
+  - name: stock
+    type: INTEGER
+    description: "库存数量"
+    default: 0
+    
+  - name: status
+    type: VARCHAR(20)
+    description: "商品状态"
+    enum: [active, inactive, out_of_stock]
+    default: "active"
+    
+  - name: created_at
+    type: TIMESTAMP
+    description: "创建时间"
+
+business_context: |
+  商品是交易的核心对象。price 是面向用户的销售价，cost 是采购成本。
+  利润 = price - cost。
+  category 用于商品分类统计。

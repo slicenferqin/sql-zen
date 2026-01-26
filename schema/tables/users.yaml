@@ -1,0 +1,49 @@
+table:
+  name: users
+  description: "用户表，存储平台所有注册用户信息"
+
+columns:
+  - name: id
+    type: SERIAL
+    description: "用户唯一标识"
+    primary_key: true
+    
+  - name: name
+    type: VARCHAR(100)
+    description: "用户姓名"
+    
+  - name: email
+    type: VARCHAR(255)
+    description: "用户邮箱，唯一"
+    unique: true
+    
+  - name: phone
+    type: VARCHAR(20)
+    description: "手机号码"
+    
+  - name: city
+    type: VARCHAR(50)
+    description: "所在城市"
+    
+  - name: country
+    type: VARCHAR(50)
+    description: "所在国家"
+    default: "China"
+    
+  - name: status
+    type: VARCHAR(20)
+    description: "用户状态"
+    enum: [active, inactive]
+    default: "active"
+    
+  - name: created_at
+    type: TIMESTAMP
+    description: "注册时间"
+    
+  - name: updated_at
+    type: TIMESTAMP
+    description: "最后更新时间"
+
+business_context: |
+  用户是平台的核心实体。每个用户可以下多个订单。
+  status 字段用于标记用户是否活跃，inactive 用户可能已注销或被禁用。

@@ -59,15 +59,28 @@ npm install -g sql-zen
 # 初始化项目
 sql-zen init
 
-# 配置数据库连接
-export DATABASE_TYPE="postgresql"
-export DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"
+# 配置环境变量（创建 .env 文件）
+cat > .env << EOF
+ANTHROPIC_API_KEY=sk-ant-your-api-key-here
+DB_TYPE=postgresql
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=mydb
+DB_USER=postgres
+DB_PASSWORD=password
+EOF
 
 # 开始提问（使用业务术语）
 sql-zen ask "上个月收入是多少？"
 sql-zen ask "哪个用户群组的转化率最高？"
 sql-zen ask "上周客户生命周期价值（CLV）是多少？"
+
+# 使用自定义模型或 API 端点
+sql-zen ask "复杂查询" --model claude-3-opus-20240229
+sql-zen ask "查询" --base-url https://your-proxy.com/v1
 ```
+
+详细配置说明请查看 [配置指南](./docs/configuration.md)。
 
 ## How It Works
 
@@ -227,32 +240,73 @@ columns:
 
 ## Configuration
 
+### 环境变量配置
+
+创建 `.env` 文件或使用 `export` 命令设置环境变量：
+
 ```bash
-# 必需：LLM API Key
-export ANTHROPIC_API_KEY="sk-ant-..."
+# 必需：Anthropic API Key
+ANTHROPIC_API_KEY=sk-ant-your-api-key-here
 
-# 必需：数据库连接（根据数据库类型选择）
+# 可选：自定义 API 端点（用于代理或私有部署）
+# ANTHROPIC_BASE_URL=https://api.anthropic.com
+# 或使用代理
+# ANTHROPIC_BASE_URL=https://your-proxy.com/v1
 
-# PostgreSQL
-export DATABASE_TYPE="postgresql"
-export DATABASE_URL="postgresql://user:pass@localhost:5432/mydb"
+# 可选：自定义模型（默认：claude-3-5-sonnet-20241022）
+# ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+# 或使用其他模型
+# ANTHROPIC_MODEL=claude-3-opus-20240229
+# ANTHROPIC_MODEL=claude-3-haiku-20240307
 
-# MySQL
-export DATABASE_TYPE="mysql"
-export DATABASE_URL="mysql://user:pass@localhost:3306/mydb"
+# 数据库配置（用于实际查询）
+DB_TYPE=postgresql
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=mydb
+DB_USER=postgres
+DB_PASSWORD=password
 
-# SQLite
-export DATABASE_TYPE="sqlite"
-export DATABASE_URL="/path/to/database.db"
+# MySQL 示例
+# DB_TYPE=mysql
+# DB_HOST=localhost
+# DB_PORT=3306
+# DB_NAME=mydb
+# DB_USER=root
+# DB_PASSWORD=password
 
-# 可选：模型选择（默认 claude-sonnet-4-20250514）
-export SQL_ZEN_MODEL="claude-sonnet-4-20250514"
+# SQLite 示例
+# DB_TYPE=sqlite
+# DB_PATH=/path/to/database.db
 ```
+
+### 命令行选项
+
+除了环境变量，还可以通过命令行选项覆盖配置：
+
+```bash
+# 使用自定义模型
+sql-zen ask "上个月收入是多少？" --model claude-3-opus-20240229
+
+# 使用自定义 API 端点
+sql-zen ask "用户转化率" --base-url https://your-proxy.com/v1
+
+# 组合使用
+sql-zen ask "最近30天订单数" --model claude-3-haiku-20240307 --base-url https://api.example.com
+```
+
+### 配置优先级
+
+配置的优先级从高到低：
+1. **命令行选项** (`--model`, `--base-url`)
+2. **环境变量** (`ANTHROPIC_MODEL`, `ANTHROPIC_BASE_URL`)
+3. **默认值** (`claude-3-5-sonnet-20241022`, `https://api.anthropic.com`)
 
 ## Documentation
 
 ### 核心文档
 
+- [配置指南](./docs/configuration.md) - 环境变量、命令行选项、配置优先级
 - [设计文档](./docs/design.md) - 架构设计和技术决策（包含双层语义架构）
 - [Roadmap](./docs/roadmap.md) - 版本规划和迭代计划
 - [开发者指南](./AGENTS.md) - AI Agent 开发指南

@@ -1,0 +1,93 @@
+cube: user_analytics
+description: "用户分析指标 - 用户数量、活跃度、LTV"
+
+dimensions:
+  - name: registration_time
+    description: "用户注册时间"
+    column: "users.created_at"
+    granularity:
+      - day:
+          sql: "DATE(users.created_at)"
+          description: "按天"
+      - month:
+          sql: "DATE_TRUNC('month', users.created_at)"
+          description: "按月"
+
+  - name: city
+    description: "用户所在城市"
+    column: "users.city"
+
+  - name: user_status
+    description: "用户状态"
+    column: "users.status"
+
+metrics:
+  - name: total_users
+    description: "总用户数"
+    sql: "COUNT(DISTINCT users.id)"
+    type: count
+
+  - name: active_users
+    description: "活跃用户数（状态为active）"
+    sql: "COUNT(DISTINCT CASE WHEN users.status = 'active' THEN users.id END)"
+    type: count
+
+  - name: new_users
+    description: "新注册用户数"
+    sql: "COUNT(DISTINCT CASE WHEN users.created_at >= CURRENT_DATE - INTERVAL '30 days' THEN users.id END)"
+    type: count
+
+  - name: paying_users
+    description: "付费用户数（有已支付订单的用户）"
+    sql: |
+      COUNT(DISTINCT CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM orders o 
+          WHERE o.user_id = users.id 
+          AND o.status IN ('paid', 'shipped', 'completed')
+        ) THEN users.id 
+      END)
+    type: count
+
+  - name: customer_lifetime_value
+    description: "客户生命周期价值 (CLV) - 平均每个用户的总消费"
+    sql: |
+      COALESCE(
+        SUM(CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.total_amount ELSE 0 END) /
+        NULLIF(COUNT(DISTINCT CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.user_id END), 0),
+        0
+      )
+    type: avg
+    unit: "元"
+    join: "LEFT JOIN orders ON users.id = orders.user_id"
+
+  - name: avg_orders_per_user
+    description: "人均订单数"
+    sql: |
+      COUNT(DISTINCT CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.id END)::DECIMAL /
+      NULLIF(COUNT(DISTINCT CASE WHEN orders.status IN ('paid', 'shipped', 'completed') THEN orders.user_id END), 0)
+    type: avg
+    join: "LEFT JOIN orders ON users.id = orders.user_id"
+
+  - name: conversion_rate
+    description: "用户转化率 - 注册用户中有购买行为的比例"
+    sql: |
+      COUNT(DISTINCT CASE 
+        WHEN EXISTS (
+          SELECT 1 FROM orders o 
+          WHERE o.user_id = users.id 
+          AND o.status IN ('paid', 'shipped', 'completed')
+        ) THEN users.id 
+      END)::DECIMAL /
+      NULLIF(COUNT(DISTINCT users.id), 0) * 100
+    type: percentage
+    unit: "%"
+
+filters:
+  - name: active_only
+    sql: "users.status = 'active'"
+    description: "仅活跃用户"
+
+  - name: registered_last_30_days
+    sql: "users.created_at >= CURRENT_DATE - INTERVAL '30 days'"
+    description: "最近30天注册"

@@ -25,7 +25,7 @@ export class SchemaParser {
         if (file.endsWith('.yaml')) {
           const filePath = join(tablesDir, file);
           const content = await fs.readFile(filePath, 'utf-8');
-          const data = yaml.load(content);
+          const data = yaml.load(content) as any;
           tables.push(data.table);
         }
       }
@@ -38,7 +38,7 @@ export class SchemaParser {
           if (file.endsWith('.yaml')) {
             const filePath = join(joinsDir, file);
             const content = await fs.readFile(filePath, 'utf-8');
-            const data = yaml.load(content);
+            const data = yaml.load(content) as any;
             if (data.relationship) {
               relationships.push(data.relationship);
             } else if (data.relationships) {

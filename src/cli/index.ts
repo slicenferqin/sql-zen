@@ -3,13 +3,17 @@
 import { Command } from 'commander';
 import { promises as fs } from 'fs';
 import ora from 'ora';
+import { config } from 'dotenv';
 import { SQLZenAgent } from '../agent/core.js';
 import { SchemaParser } from '../schema/parser.js';
+
+// 加载 .env 文件
+config();
 
 async function main() {
   const pkg = JSON.parse(
     await fs.readFile(
-      new URL('../package.json', import.meta.url),
+      new URL('../../package.json', import.meta.url),
       'utf-8'
     )
   );
@@ -20,7 +24,8 @@ async function main() {
     .version(pkg.version);
 
   program
-    .command('init', 'Initialize SQL-Zen project')
+    .command('init')
+    .description('Initialize SQL-Zen project')
     .action(async () => {
       const spinner = ora('Initializing SQL-Zen...').start();
       
@@ -88,41 +93,61 @@ filters:
         console.log('Cube layer example created: schema/cubes/business-metrics.yaml');
         console.log('Run "sql-zen ask \\"your question\\"" to start querying');
       } catch (error) {
-        spinner.fail(`Failed to initialize: ${error.message}`);
-        console.error(error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        spinner.fail(`Failed to initialize: ${errorMessage}`);
+        console.error(errorMessage);
         process.exit(1);
       }
     });
 
   program
-    .command('ask <question>', 'Ask a question to query database')
+    .command('ask <question>')
+    .description('Ask a question to query database')
     .option('--cube', 'Prioritize Cube layer for business metrics')
-    .action(async (question, options) => {
+    .option('--model <model>', 'Specify Claude model to use')
+    .option('--base-url <url>', 'Specify custom API base URL')
+    .action(async (question, cmdOptions) => {
       const spinner = ora('Processing query...').start();
       
       try {
         const apiKey = process.env.ANTHROPIC_API_KEY;
         if (!apiKey) {
-          throw new Error('ANTHROPIC_API_KEY environment variable is required. Set it with:\n  export ANTHROPIC_API_KEY=sk-ant-...');
+          throw new Error('ANTHROPIC_API_KEY environment variable is required.\nCreate a .env file with:\n  ANTHROPIC_API_KEY=sk-ant-...\nOr set it with:\n  export ANTHROPIC_API_KEY=sk-ant-...');
         }
 
-        const agent = new SQLZenAgent({ apiKey });
-        await agent.initialize();
+        // 读取数据库配置
+        const dbConfig = {
+          database: process.env.DB_NAME || 'test',
+          host: process.env.DB_HOST || 'localhost',
+          port: parseInt(process.env.DB_PORT || '5432'),
+          user: process.env.DB_USER || process.env.USER || 'postgres',
+          password: process.env.DB_PASSWORD,
+          ssl: process.env.DB_SSL === 'true'
+        };
 
-        const response = await agent.processQuery(question);
+        // 创建 Agent，支持自定义配置
+        const agent = new SQLZenAgent({
+          model: cmdOptions.model,
+          baseURL: cmdOptions.baseUrl
+        });
+        await agent.initialize(dbConfig);
+
+        const response = await agent.processQueryWithTools(question);
         
         spinner.succeed('Query processed successfully!');
         console.log('✓ Query processed');
         console.log(response);
       } catch (error) {
-        spinner.fail(`Query failed: ${error.message}`);
-        console.error(error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        spinner.fail(`Query failed: ${errorMessage}`);
+        console.error(errorMessage);
         process.exit(1);
       }
     });
 
   program
-    .command('validate', 'Validate schema files')
+    .command('validate')
+    .description('Validate schema files')
     .option('--cube', 'Validate Cube layer files')
     .action(async (options) => {
       const spinner = ora('Validating schema...').start();
@@ -146,14 +171,16 @@ filters:
           process.exit(1);
         }
       } catch (error) {
-        spinner.fail(`Validation failed: ${error.message}`);
-        console.error(error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        spinner.fail(`Validation failed: ${errorMessage}`);
+        console.error(errorMessage);
         process.exit(1);
       }
     });
 
   program
-    .command('cube <name>', 'Create a new Cube')
+    .command('cube <name>')
+    .description('Create a new Cube')
     .action(async (name) => {
       const spinner = ora(`Creating Cube: ${name}...`).start();
       
@@ -190,8 +217,9 @@ filters:
         console.log(`✓ Cube created: schema/cubes/${name}.yaml`);
         console.log('Edit the file to add your metrics, dimensions, and filters');
       } catch (error) {
-        spinner.fail(`Failed to create Cube: ${error.message}`);
-        console.error(error.message);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        spinner.fail(`Failed to create Cube: ${errorMessage}`);
+        console.error(errorMessage);
         process.exit(1);
       }
     });

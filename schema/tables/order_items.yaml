@@ -1,0 +1,40 @@
+table:
+  name: order_items
+  description: "订单明细表，记录订单中的商品"
+
+columns:
+  - name: id
+    type: SERIAL
+    description: "明细唯一标识"
+    primary_key: true
+    
+  - name: order_id
+    type: INTEGER
+    description: "所属订单ID"
+    foreign_key: orders.id
+    
+  - name: product_id
+    type: INTEGER
+    description: "商品ID"
+    foreign_key: products.id
+    
+  - name: quantity
+    type: INTEGER
+    description: "购买数量"
+    
+  - name: unit_price
+    type: DECIMAL(10, 2)
+    description: "下单时的单价（单位：元）"
+    
+  - name: subtotal
+    type: DECIMAL(12, 2)
+    description: "小计金额 = quantity * unit_price"
+    
+  - name: created_at
+    type: TIMESTAMP
+    description: "创建时间"
+
+business_context: |
+  订单明细是订单和商品之间的关联表。
+  unit_price 记录下单时的价格，避免商品调价影响历史订单。
+  subtotal = quantity * unit_price。
