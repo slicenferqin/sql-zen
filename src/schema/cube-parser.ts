@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import type { Cube } from '../types/index.js';
 import { CubeParseError } from '../errors/index.js';
+import { getLogger } from '../logging/index.js';
 
 /**
  * Cube 层解析器，解析 YAML 格式的 Cube 定义文件。
@@ -62,6 +63,7 @@ export async function parseCubeFile(filePath: string): Promise<Cube> {
  */
 export async function parseCubesDirectory(dir: string, options: CubeParseOptions = {}): Promise<Cube[]> {
   const cubes: Cube[] = [];
+  const logger = getLogger().child({ module: 'cube-parser' });
 
   try {
     const files = await fs.readdir(dir);
@@ -76,7 +78,10 @@ export async function parseCubesDirectory(dir: string, options: CubeParseOptions
         if (options.strict) {
           throw error;
         }
-        console.warn(`Warning: Failed to parse ${file}: ${error instanceof Error ? error.message : String(error)}`);
+        logger.warn('Failed to parse cube file', {
+          file,
+          error: error instanceof Error ? error.message : String(error)
+        });
       }
     }
   } catch (error) {

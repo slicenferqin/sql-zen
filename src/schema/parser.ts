@@ -4,12 +4,15 @@ import { join } from 'path';
 import { SchemaTable, SchemaConfig, Cube } from '../types/index.js';
 import { parseCubesDirectory, validateCube } from './cube-parser.js';
 import { SchemaParseError, SchemaValidationError } from '../errors/index.js';
+import { getLogger, type Logger } from '../logging/index.js';
 
 export class SchemaParser {
   private schemaDir: string;
+  private logger: Logger;
 
   constructor(schemaDir: string = 'schema') {
     this.schemaDir = schemaDir;
+    this.logger = getLogger().child({ module: 'schema-parser' });
   }
 
   async loadSchema(options: { includeCubes?: boolean } = {}): Promise<SchemaConfig> {
@@ -122,7 +125,9 @@ export class SchemaParser {
       if (error instanceof SchemaValidationError) {
         throw error;
       }
-      console.error(`Schema validation failed: ${error}`);
+      this.logger.error('Schema validation failed', {
+        error: error instanceof Error ? error.message : String(error)
+      });
       return {
         valid: false,
         errors: [`验证失败: ${error instanceof Error ? error.message : String(error)}`],

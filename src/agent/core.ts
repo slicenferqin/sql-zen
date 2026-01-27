@@ -10,6 +10,7 @@ import {
 import { SQLiteCacheManager, generateCacheKey, calculateExpiresAt } from '../cache/index.js';
 import { loadCacheConfig } from '../config/cache-config.js';
 import type { CacheConfig } from '../cache/cache-manager.js';
+import { getLogger, getPerformanceMonitor, type Logger } from '../logging/index.js';
 
 export interface AgentOptions {
   apiKey?: string;
@@ -44,8 +45,13 @@ export class SQLZenAgent {
   private cacheManager: SQLiteCacheManager | null = null;
   private cacheConfig: CacheConfig;
   private cacheEnabled: boolean;
+  private logger: Logger;
+  private perfMonitor = getPerformanceMonitor();
 
   constructor(options: AgentOptions = {}, dependencies?: AgentDependencies) {
+    // 初始化 logger
+    this.logger = getLogger().child({ module: 'agent' });
+
     // 如果提供了依赖注入，使用注入的对象
     if (dependencies?.anthropicClient) {
       this.anthropic = dependencies.anthropicClient;
@@ -91,6 +97,10 @@ export class SQLZenAgent {
 
     // 如果已经有连接（通过依赖注入），则跳过
     if (!this.dbConnection) {
+      this.logger.debug('Connecting to database', {
+        host: dbConfig.host || 'localhost',
+        database: dbConfig.database
+      });
       this.dbConnection = await this.mysqlModule.createConnection({
         host: dbConfig.host || 'localhost',
         port: dbConfig.port || 3306,
@@ -99,7 +109,7 @@ export class SQLZenAgent {
         password: dbConfig.password || '',
       });
     }
-    console.log('Agent initialized');
+    this.logger.info('Agent initialized');
   }
 
   async cleanup(): Promise<void> {
@@ -332,15 +342,20 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
 
   async processQueryWithTools(userQuestion: string, options: { useCache?: boolean } = {}): Promise<string> {
     const useCache = options.useCache ?? this.cacheEnabled;
+    const overallTimer = this.logger.startTimer();
+
+    this.logger.info('Processing query', { query: userQuestion.substring(0, 100) });
 
     // 1. 检查缓存
     if (useCache && this.cacheManager) {
       const queryHash = generateCacheKey(userQuestion);
       const cached = await this.cacheManager.get(queryHash);
       if (cached) {
-        console.log('✓ 缓存命中');
+        this.perfMonitor.recordCacheHit();
+        this.logger.info('Cache hit', { duration: overallTimer() });
         return cached.result;
       }
+      this.perfMonitor.recordCacheMiss();
     }
 
     // 2. 执行查询
@@ -351,10 +366,12 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
     let continueLoop = true;
     let finalResponse = '';
     const executedSqls: string[] = [];
+    let toolCallCount = 0;
 
     while (continueLoop) {
       let response;
       try {
+        const apiTimer = this.logger.startTimer();
         response = await this.anthropic.messages.create({
           model: this.model,
           max_tokens: 4096,
@@ -395,7 +412,9 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
             }
           ]
         });
+        this.perfMonitor.recordApiTime(apiTimer());
       } catch (error) {
+        this.logger.error('API request failed', { error: error instanceof Error ? error.message : String(error) });
         throw new APIRequestError(
           `API 请求失败: ${error instanceof Error ? error.message : String(error)}`,
           { cause: error instanceof Error ? error : undefined }
@@ -421,8 +440,9 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
             const toolName = block.name;
             const toolInput = block.input as any;
             let toolResult: any;
+            toolCallCount++;
 
-            console.log(`🔧 Executing tool: ${toolName}`);
+            this.logger.debug('Executing tool', { tool: toolName });
 
             if (toolName === 'execute_bash') {
               const result = await this.bashTool.execute(toolInput.command);
@@ -437,19 +457,31 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
               }
               try {
                 const query = toolInput.limit > 0 ? `${toolInput.sql} LIMIT ${toolInput.limit}` : toolInput.sql;
-                console.log(`📊 Executing SQL: ${query}`);
+                this.logger.debug('Executing SQL', { sql: query.substring(0, 200) });
                 executedSqls.push(query);
+
+                const sqlTimer = this.logger.startTimer();
                 const [rows] = await this.dbConnection.query(query);
+                const sqlDuration = sqlTimer();
+                this.perfMonitor.recordQueryTime(sqlDuration);
+
+                const rowCount = Array.isArray(rows) ? rows.length : 0;
+                this.logger.info('Query completed', { duration: sqlDuration, rows: rowCount });
+
                 toolResult = {
                   type: 'tool_result',
                   tool_use_id: block.id,
                   content: JSON.stringify({
                     success: true,
                     data: rows,
-                    rowCount: Array.isArray(rows) ? rows.length : 0
+                    rowCount
                   }, null, 2)
                 };
               } catch (error) {
+                this.logger.error('Query execution failed', {
+                  sql: toolInput.sql.substring(0, 200),
+                  error: error instanceof Error ? error.message : String(error)
+                });
                 const dbError = new DatabaseQueryError(
                   `查询执行失败: ${error instanceof Error ? error.message : String(error)}`,
                   {
@@ -503,6 +535,12 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
         expiresAt: calculateExpiresAt(this.cacheConfig.ttl)
       });
     }
+
+    this.logger.info('Query processing completed', {
+      duration: overallTimer(),
+      toolCalls: toolCallCount,
+      sqlQueries: executedSqls.length
+    });
 
     return finalResponse;
   }

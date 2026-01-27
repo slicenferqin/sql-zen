@@ -433,14 +433,11 @@ describe('CubeParser', () => {
         .mockReturnValueOnce({ invalid: 'data' })
         .mockReturnValueOnce(validCubeData);
 
-      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
-
       const cubes = await parseCubesDirectory('/test/cubes', { strict: false });
 
+      // 应该只返回有效的 cube，跳过无效的
       expect(cubes).toHaveLength(1);
-      expect(consoleSpy).toHaveBeenCalled();
-
-      consoleSpy.mockRestore();
+      expect(cubes[0].name).toBe('business_metrics');
     });
 
     it('应该处理目录读取错误', async () => {

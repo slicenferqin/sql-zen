@@ -8,6 +8,12 @@ import { SQLZenAgent } from '../agent/core.js';
 import { SchemaParser } from '../schema/parser.js';
 import { SQLZenError } from '../errors/index.js';
 import { formatCacheStats } from '../cache/index.js';
+import {
+  configureLogger,
+  getPerformanceMonitor,
+  isValidLogLevel,
+  type LogLevel
+} from '../logging/index.js';
 
 // 加载 .env 文件
 config();
@@ -33,7 +39,36 @@ async function main() {
   const program = new Command()
     .name(pkg.name)
     .description(pkg.description)
-    .version(pkg.version);
+    .version(pkg.version)
+    .option('--debug', 'Enable debug logging')
+    .option('--log-level <level>', 'Set log level (debug, info, warn, error)')
+    .option('--log-file <path>', 'Log to file')
+    .option('--json-logs', 'Output logs in JSON format');
+
+  // 在命令执行前初始化日志
+  program.hook('preAction', (thisCommand) => {
+    const opts = thisCommand.opts();
+    const loggerOptions: { level?: LogLevel; file?: string; jsonLogs?: boolean; pretty?: boolean } = {};
+
+    if (opts.debug) {
+      loggerOptions.level = 'debug';
+    } else if (opts.logLevel && isValidLogLevel(opts.logLevel)) {
+      loggerOptions.level = opts.logLevel as LogLevel;
+    }
+
+    if (opts.logFile) {
+      loggerOptions.file = opts.logFile;
+    }
+
+    if (opts.jsonLogs) {
+      loggerOptions.jsonLogs = true;
+      loggerOptions.pretty = false;
+    }
+
+    if (Object.keys(loggerOptions).length > 0) {
+      configureLogger(loggerOptions);
+    }
+  });
 
   program
     .command('init')
@@ -295,6 +330,15 @@ filters:
         console.error(formatError(error));
         process.exit(1);
       }
+    });
+
+  // 性能统计命令
+  program
+    .command('stats')
+    .description('Show performance statistics')
+    .action(() => {
+      const monitor = getPerformanceMonitor();
+      console.log(monitor.formatSummary());
     });
 
   program.parse();
