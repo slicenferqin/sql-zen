@@ -1,4 +1,9 @@
 import mysql from 'mysql2/promise';
+import {
+  DatabaseConnectionError,
+  DatabaseQueryError,
+  DatabaseNotConnectedError
+} from '../errors/index.js';
 
 export interface DatabaseConfig {
   host?: string;
@@ -29,14 +34,29 @@ export class DatabaseConnector {
       ssl: this.config.ssl ? { rejectUnauthorized: false } : undefined
     };
 
-    if (this.config.connectionLimit && this.config.connectionLimit > 1) {
-      this.pool = mysql.createPool({
-        ...connectionConfig,
-        waitForConnections: true,
-        queueLimit: 0
-      });
-    } else {
-      this.connection = await mysql.createConnection(connectionConfig);
+    try {
+      if (this.config.connectionLimit && this.config.connectionLimit > 1) {
+        this.pool = mysql.createPool({
+          ...connectionConfig,
+          waitForConnections: true,
+          queueLimit: 0
+        });
+      } else {
+        this.connection = await mysql.createConnection(connectionConfig);
+      }
+    } catch (error) {
+      throw new DatabaseConnectionError(
+        `无法连接到 MySQL 数据库: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          cause: error instanceof Error ? error : undefined,
+          context: {
+            host: connectionConfig.host,
+            port: connectionConfig.port,
+            database: connectionConfig.database,
+            user: connectionConfig.user
+          }
+        }
+      );
     }
   }
 
@@ -56,7 +76,9 @@ export class DatabaseConnector {
     const conn = hasPool ? this.pool : this.connection;
 
     if (!conn) {
-      throw new Error('Database not connected');
+      throw new DatabaseNotConnectedError({
+        context: { database: this.config.database }
+      });
     }
 
     try {
@@ -64,7 +86,14 @@ export class DatabaseConnector {
       const [rows] = await conn.execute(query);
       return Array.isArray(rows) ? rows : [];
     } catch (error) {
-      throw new Error(`Query execution failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new DatabaseQueryError(
+        `查询执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          sql,
+          cause: error instanceof Error ? error : undefined,
+          context: { database: this.config.database }
+        }
+      );
     }
   }
 

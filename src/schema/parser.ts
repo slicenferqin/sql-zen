@@ -3,6 +3,7 @@ import { promises as fs } from 'fs';
 import { join } from 'path';
 import { SchemaTable, SchemaConfig, Cube } from '../types/index.js';
 import { parseCubesDirectory, validateCube } from './cube-parser.js';
+import { SchemaParseError, SchemaValidationError } from '../errors/index.js';
 
 export class SchemaParser {
   private schemaDir: string;
@@ -62,7 +63,16 @@ export class SchemaParser {
         cubes: cubes.length > 0 ? cubes : undefined,
       };
     } catch (error) {
-      throw new Error(`Failed to load schema: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof SchemaParseError) {
+        throw error;
+      }
+      throw new SchemaParseError(
+        `加载 Schema 失败: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          filePath: this.schemaDir,
+          cause: error instanceof Error ? error : undefined
+        }
+      );
     }
   }
 
@@ -80,7 +90,7 @@ export class SchemaParser {
     try {
       // 验证 Schema 层
       const schema = await this.loadSchema();
-      
+
       for (const table of schema.tables) {
         if (!table.name || !table.columns || table.columns.length === 0) {
           errors.push(`Invalid table definition: ${table.name}`);
@@ -109,10 +119,13 @@ export class SchemaParser {
         errors,
       };
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw error;
+      }
       console.error(`Schema validation failed: ${error}`);
       return {
         valid: false,
-        errors: [`Validation failed: ${error instanceof Error ? error.message : String(error)}`],
+        errors: [`验证失败: ${error instanceof Error ? error.message : String(error)}`],
       };
     }
   }

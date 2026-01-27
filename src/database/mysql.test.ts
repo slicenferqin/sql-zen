@@ -193,7 +193,7 @@ describe('MySQL DatabaseConnector', () => {
       const disconnectedConnector = new DatabaseConnector({ database: 'test' });
 
       await expect(disconnectedConnector.executeQuery('SELECT 1')).rejects.toThrow(
-        'Database not connected'
+        '数据库未连接'
       );
     });
 
@@ -201,7 +201,7 @@ describe('MySQL DatabaseConnector', () => {
       mockConnection.execute.mockRejectedValueOnce(new Error('SQL syntax error'));
 
       await expect(connector.executeQuery('INVALID SQL')).rejects.toThrow(
-        'Query execution failed: SQL syntax error'
+        '查询执行失败: SQL syntax error'
       );
     });
 

@@ -1,4 +1,9 @@
 import Database from 'better-sqlite3';
+import {
+  DatabaseConnectionError,
+  DatabaseQueryError,
+  DatabaseNotConnectedError
+} from '../errors/index.js';
 
 export class DatabaseConnector {
   private db: Database.Database | null = null;
@@ -9,7 +14,17 @@ export class DatabaseConnector {
   }
 
   async connect(): Promise<void> {
-    this.db = new Database(this.dbPath);
+    try {
+      this.db = new Database(this.dbPath);
+    } catch (error) {
+      throw new DatabaseConnectionError(
+        `无法打开 SQLite 数据库: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          cause: error instanceof Error ? error : undefined,
+          context: { dbPath: this.dbPath }
+        }
+      );
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -21,7 +36,9 @@ export class DatabaseConnector {
 
   async executeQuery(sql: string, limit: number = 100): Promise<any[]> {
     if (!this.db) {
-      throw new Error('Database not connected');
+      throw new DatabaseNotConnectedError({
+        context: { dbPath: this.dbPath }
+      });
     }
 
     try {
@@ -30,7 +47,14 @@ export class DatabaseConnector {
       const rows = stmt.all();
       return rows;
     } catch (error) {
-      throw new Error(`Query execution failed: ${error instanceof Error ? error.message : String(error)}`);
+      throw new DatabaseQueryError(
+        `查询执行失败: ${error instanceof Error ? error.message : String(error)}`,
+        {
+          sql,
+          cause: error instanceof Error ? error : undefined,
+          context: { dbPath: this.dbPath }
+        }
+      );
     }
   }
 

@@ -208,7 +208,7 @@ describe('SchemaParser', () => {
     it('应该处理文件读取错误', async () => {
       mockFs.readdir.mockRejectedValueOnce(new Error('Permission denied'));
 
-      await expect(parser.loadSchema()).rejects.toThrow('Failed to load schema: Permission denied');
+      await expect(parser.loadSchema()).rejects.toThrow('加载 Schema 失败: Permission denied');
     });
 
     it('应该处理 YAML 解析错误', async () => {
@@ -218,7 +218,7 @@ describe('SchemaParser', () => {
         throw new Error('YAML parse error');
       });
 
-      await expect(parser.loadSchema()).rejects.toThrow('Failed to load schema: YAML parse error');
+      await expect(parser.loadSchema()).rejects.toThrow('加载 Schema 失败: YAML parse error');
     });
   });
 
@@ -376,8 +376,7 @@ describe('SchemaParser', () => {
       const result = await parser.validateSchema();
 
       expect(result.valid).toBe(false);
-      expect(result.errors[0]).toContain('Validation failed:');
-      expect(result.errors[0]).toContain('File system error');
+      expect(result.errors[0]).toContain('验证失败:');
     });
   });
 

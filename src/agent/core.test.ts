@@ -80,7 +80,7 @@ describe('SQLZenAgent', () => {
       delete process.env.ANTHROPIC_API_KEY;
       expect(() => {
         new SQLZenAgent();
-      }).toThrow('ANTHROPIC_API_KEY environment variable is required');
+      }).toThrow('ANTHROPIC_API_KEY 环境变量未设置');
     });
 
     it('应该支持通过依赖注入提供 Anthropic 客户端', () => {
@@ -253,7 +253,7 @@ describe('SQLZenAgent', () => {
           ],
         });
 
-      const result = await agent.processQueryWithTools('有多少用户？');
+      const result = await agent.processQueryWithTools('有多少用户？', { useCache: false });
       expect(result).toBe('总共有 100 个用户');
       expect(mockAnthropicClient.messages.create).toHaveBeenCalledTimes(2);
     });
@@ -269,15 +269,15 @@ describe('SQLZenAgent', () => {
         ],
       });
 
-      const result = await agent.processQueryWithTools('你好');
+      const result = await agent.processQueryWithTools('你好', { useCache: false });
       expect(result).toBe('根据我的理解，这是一个简单的统计问题');
       expect(mockAnthropicClient.messages.create).toHaveBeenCalledTimes(1);
     });
 
     it('应该在未连接数据库时抛出错误', async () => {
-      // 创建一个没有数据库连接的新 agent
+      // 创建一个没有数据库连接的新 agent（禁用缓存）
       const agentWithoutDb = new SQLZenAgent(
-        {},
+        { cache: { enabled: false } },
         { anthropicClient: mockAnthropicClient as any }
       );
 
@@ -298,7 +298,7 @@ describe('SQLZenAgent', () => {
 
       await expect(
         agentWithoutDb.processQueryWithTools('有多少用户？')
-      ).rejects.toThrow('Database not connected');
+      ).rejects.toThrow('数据库未连接');
     });
 
     it('应该正确执行 SQL 查询', async () => {
@@ -330,7 +330,8 @@ describe('SQLZenAgent', () => {
           ],
         });
 
-      await agent.processQueryWithTools('有多少用户？');
+      // 使用 useCache: false 来避免缓存命中
+      await agent.processQueryWithTools('有多少用户？', { useCache: false });
 
       expect(mockDbConnection.query).toHaveBeenCalledWith(
         'SELECT COUNT(*) as count FROM users LIMIT 100'

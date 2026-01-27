@@ -125,7 +125,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('Missing or invalid "dimensions" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('"dimensions" 字段缺失或无效（必须是数组）');
     });
 
     it('应该在 dimensions 不是数组时抛出错误', async () => {
@@ -134,7 +134,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('Missing or invalid "dimensions" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('"dimensions" 字段缺失或无效（必须是数组）');
     });
 
     it('应该在缺少 metrics 字段时抛出错误', async () => {
@@ -144,7 +144,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('Missing or invalid "metrics" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('"metrics" 字段缺失或无效（必须是数组）');
     });
 
     it('应该在 metrics 不是数组时抛出错误', async () => {
@@ -153,7 +153,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('Missing or invalid "metrics" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('"metrics" 字段缺失或无效（必须是数组）');
     });
 
     it('应该处理没有 filters 的 Cube', async () => {
@@ -184,7 +184,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockRejectedValueOnce(new Error('File not found'));
 
       await expect(parseCubeFile('test.yaml')).rejects.toThrow(CubeParseError);
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('Failed to parse cube file');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('解析 Cube 文件失败:');
     });
   });
 
@@ -198,7 +198,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "name" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "name" 字段');
     });
 
     it('应该在维度缺少 description 时抛出错误', async () => {
@@ -210,7 +210,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "description" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "description" 字段');
     });
 
     it('应该在维度缺少 column 和 columns 时抛出错误', async () => {
@@ -222,7 +222,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('must have either "column" or "columns" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('必须有 "column" 或 "columns" 字段');
     });
   });
 
@@ -236,7 +236,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "name" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "name" 字段');
     });
 
     it('应该在度量缺少 description 时抛出错误', async () => {
@@ -248,7 +248,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "description" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "description" 字段');
     });
 
     it('应该在度量缺少 sql 时抛出错误', async () => {
@@ -260,7 +260,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "sql" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "sql" 字段');
     });
 
     it('应该在度量缺少 type 时抛出错误', async () => {
@@ -272,7 +272,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "type" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "type" 字段');
     });
 
     it('应该在度量 type 无效时抛出错误', async () => {
@@ -284,7 +284,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('has invalid type');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('的类型');
     });
   });
 
@@ -298,7 +298,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "name" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "name" 字段');
     });
 
     it('应该在过滤器缺少 sql 时抛出错误', async () => {
@@ -310,7 +310,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "sql" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "sql" 字段');
     });
 
     it('应该在过滤器缺少 description 时抛出错误', async () => {
@@ -322,7 +322,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "description" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "description" 字段');
     });
   });
 
@@ -336,7 +336,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "from" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "from" 字段');
     });
 
     it('应该在 JOIN 缺少 to 时抛出错误', async () => {
@@ -348,7 +348,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "to" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "to" 字段');
     });
 
     it('应该在 JOIN 缺少 type 时抛出错误', async () => {
@@ -360,7 +360,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "type" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "type" 字段');
     });
 
     it('应该在 JOIN 缺少 condition 时抛出错误', async () => {
@@ -372,7 +372,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('missing "condition" field');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('缺少 "condition" 字段');
     });
 
     it('应该在 JOIN type 无效时抛出错误', async () => {
@@ -384,7 +384,7 @@ describe('CubeParser', () => {
       mockFs.readFile.mockResolvedValueOnce('invalid');
       mockYaml.load.mockReturnValueOnce(invalidData);
 
-      await expect(parseCubeFile('test.yaml')).rejects.toThrow('has invalid type');
+      await expect(parseCubeFile('test.yaml')).rejects.toThrow('的类型');
     });
   });
 
@@ -447,7 +447,7 @@ describe('CubeParser', () => {
       mockFs.readdir.mockRejectedValueOnce(new Error('Permission denied'));
 
       await expect(parseCubesDirectory('/test/cubes')).rejects.toThrow(CubeParseError);
-      await expect(parseCubesDirectory('/test/cubes')).rejects.toThrow('Failed to read cubes directory');
+      await expect(parseCubesDirectory('/test/cubes')).rejects.toThrow('读取 Cubes 目录失败');
     });
   });
 

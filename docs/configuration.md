@@ -66,6 +66,24 @@ DB_SSL=false
 # DB_PATH=/path/to/database.db
 ```
 
+#### 缓存配置
+
+```bash
+# 启用/禁用缓存（默认: true）
+ENABLE_CACHE=true
+
+# 缓存 TTL，单位毫秒（默认: 300000，即 5 分钟）
+CACHE_TTL=300000
+
+# 最大缓存条目数（默认: 100）
+CACHE_MAX_SIZE=100
+
+# 缓存数据库路径（默认: ~/.sql-zen/cache.db）
+CACHE_DB_PATH=~/.sql-zen/cache.db
+```
+
+更多缓存配置详情请参考 [缓存系统文档](./caching.md)。
+
 ## 命令行选项
 
 除了环境变量，还可以通过命令行选项临时覆盖配置：
@@ -79,6 +97,17 @@ Options:
   --cube              优先使用 Cube 层的业务指标
   --model <model>     指定使用的 Claude 模型
   --base-url <url>    指定自定义的 API 端点
+  --no-cache          禁用查询结果缓存
+```
+
+### cache 命令
+
+```bash
+# 查看缓存统计信息
+sql-zen cache stats
+
+# 清空所有缓存
+sql-zen cache clear
 ```
 
 ### 使用示例

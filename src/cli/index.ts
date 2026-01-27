@@ -6,9 +6,21 @@ import ora from 'ora';
 import { config } from 'dotenv';
 import { SQLZenAgent } from '../agent/core.js';
 import { SchemaParser } from '../schema/parser.js';
+import { SQLZenError } from '../errors/index.js';
+import { formatCacheStats } from '../cache/index.js';
 
 // 加载 .env 文件
 config();
+
+/**
+ * 格式化错误输出
+ */
+function formatError(error: unknown): string {
+  if (error instanceof SQLZenError) {
+    return error.format();
+  }
+  return error instanceof Error ? error.message : String(error);
+}
 
 async function main() {
   const pkg = JSON.parse(
@@ -106,9 +118,10 @@ filters:
     .option('--cube', 'Prioritize Cube layer for business metrics')
     .option('--model <model>', 'Specify Claude model to use')
     .option('--base-url <url>', 'Specify custom API base URL')
+    .option('--no-cache', 'Disable query result caching')
     .action(async (question, cmdOptions) => {
       const spinner = ora('Processing query...').start();
-      
+
       try {
         const apiKey = process.env.ANTHROPIC_API_KEY;
         if (!apiKey) {
@@ -128,19 +141,23 @@ filters:
         // 创建 Agent，支持自定义配置
         const agent = new SQLZenAgent({
           model: cmdOptions.model,
-          baseURL: cmdOptions.baseUrl
+          baseURL: cmdOptions.baseUrl,
+          cache: { enabled: cmdOptions.cache !== false }
         });
         await agent.initialize(dbConfig);
 
-        const response = await agent.processQueryWithTools(question);
-        
+        const response = await agent.processQueryWithTools(question, {
+          useCache: cmdOptions.cache !== false
+        });
+
         spinner.succeed('Query processed successfully!');
         console.log('✓ Query processed');
         console.log(response);
+
+        await agent.cleanup();
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        spinner.fail(`Query failed: ${errorMessage}`);
-        console.error(errorMessage);
+        spinner.fail(`Query failed`);
+        console.error(formatError(error));
         process.exit(1);
       }
     });
@@ -220,6 +237,62 @@ filters:
         const errorMessage = error instanceof Error ? error.message : String(error);
         spinner.fail(`Failed to create Cube: ${errorMessage}`);
         console.error(errorMessage);
+        process.exit(1);
+      }
+    });
+
+  // 缓存命令组
+  const cacheCommand = program
+    .command('cache')
+    .description('Manage query result cache');
+
+  cacheCommand
+    .command('stats')
+    .description('Show cache statistics')
+    .action(async () => {
+      const spinner = ora('Loading cache statistics...').start();
+
+      try {
+        // 初始化缓存但不连接数据库
+        const { SQLiteCacheManager } = await import('../cache/index.js');
+        const { loadCacheConfig } = await import('../config/cache-config.js');
+        const cacheConfig = loadCacheConfig();
+        const cacheManager = new SQLiteCacheManager(cacheConfig);
+        await cacheManager.initialize();
+
+        const stats = await cacheManager.getStats();
+        await cacheManager.close();
+
+        spinner.succeed('Cache statistics loaded');
+        console.log(formatCacheStats(stats));
+      } catch (error) {
+        spinner.fail('Failed to load cache statistics');
+        console.error(formatError(error));
+        process.exit(1);
+      }
+    });
+
+  cacheCommand
+    .command('clear')
+    .description('Clear all cached query results')
+    .action(async () => {
+      const spinner = ora('Clearing cache...').start();
+
+      try {
+        const { SQLiteCacheManager } = await import('../cache/index.js');
+        const { loadCacheConfig } = await import('../config/cache-config.js');
+        const cacheConfig = loadCacheConfig();
+        const cacheManager = new SQLiteCacheManager(cacheConfig);
+        await cacheManager.initialize();
+
+        await cacheManager.clear();
+        await cacheManager.close();
+
+        spinner.succeed('Cache cleared successfully');
+        console.log('✓ All cached query results have been removed');
+      } catch (error) {
+        spinner.fail('Failed to clear cache');
+        console.error(formatError(error));
         process.exit(1);
       }
     });

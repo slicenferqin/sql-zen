@@ -18,8 +18,9 @@
     "test:ci": "jest --ci --coverage --maxWorkers=2",
     "prepare": "npm run build",
     "video:preview": "remotion studio video/src/index.ts",
-    "video:render": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo.mp4",
-    "video:render:gif": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo.gif --image-format=png"
+    "video:render": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo-4k.mp4 --codec=h264",
+    "video:render:1080p": "remotion render video/src/index.ts SqlZenPromo-1080p out/sql-zen-promo-1080p.mp4",
+    "video:render:prores": "remotion render video/src/index.ts SqlZenPromo out/sql-zen-promo-4k.mov --codec=prores"
   },
   "files": [
     "dist",

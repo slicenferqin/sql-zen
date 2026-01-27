@@ -1,12 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BashTool } from '../tools/execute-bash.js';
 import mysql from 'mysql2/promise';
+import {
+  APIKeyMissingError,
+  APIRequestError,
+  DatabaseNotConnectedError,
+  DatabaseQueryError
+} from '../errors/index.js';
+import { SQLiteCacheManager, generateCacheKey, calculateExpiresAt } from '../cache/index.js';
+import { loadCacheConfig } from '../config/cache-config.js';
+import type { CacheConfig } from '../cache/cache-manager.js';
 
 export interface AgentOptions {
   apiKey?: string;
   baseURL?: string;
   model?: string;
   maxRetries?: number;
+  cache?: Partial<CacheConfig> & { enabled?: boolean };
   database?: {
     host?: string;
     port?: number;
@@ -22,6 +32,7 @@ export interface AgentDependencies {
   bashTool?: BashTool;
   dbConnection?: mysql.Connection;
   mysqlModule?: typeof mysql;
+  cacheManager?: SQLiteCacheManager;
 }
 
 export class SQLZenAgent {
@@ -30,6 +41,9 @@ export class SQLZenAgent {
   private dbConnection: mysql.Connection | null = null;
   private model: string;
   private mysqlModule: typeof mysql;
+  private cacheManager: SQLiteCacheManager | null = null;
+  private cacheConfig: CacheConfig;
+  private cacheEnabled: boolean;
 
   constructor(options: AgentOptions = {}, dependencies?: AgentDependencies) {
     // 如果提供了依赖注入，使用注入的对象
@@ -38,7 +52,7 @@ export class SQLZenAgent {
     } else {
       const apiKey = options.apiKey || process.env.ANTHROPIC_API_KEY || '';
       if (!apiKey) {
-        throw new Error('ANTHROPIC_API_KEY environment variable is required');
+        throw new APIKeyMissingError();
       }
 
       const baseURL = options.baseURL || process.env.ANTHROPIC_BASE_URL;
@@ -53,9 +67,28 @@ export class SQLZenAgent {
     this.bashTool = dependencies?.bashTool || new BashTool();
     this.dbConnection = dependencies?.dbConnection || null;
     this.mysqlModule = dependencies?.mysqlModule || mysql;
+
+    // 缓存配置
+    this.cacheConfig = loadCacheConfig();
+    if (options.cache) {
+      this.cacheConfig = { ...this.cacheConfig, ...options.cache };
+    }
+    this.cacheEnabled = options.cache?.enabled ?? this.cacheConfig.enabled;
+
+    // 使用注入的缓存管理器或创建新的
+    if (dependencies?.cacheManager) {
+      this.cacheManager = dependencies.cacheManager;
+    } else if (this.cacheEnabled) {
+      this.cacheManager = new SQLiteCacheManager(this.cacheConfig);
+    }
   }
 
   async initialize(dbConfig: { database: string; host?: string; port?: number; user?: string; password?: string; ssl?: boolean }): Promise<void> {
+    // 初始化缓存
+    if (this.cacheManager && !this.cacheManager.isInitialized()) {
+      await this.cacheManager.initialize();
+    }
+
     // 如果已经有连接（通过依赖注入），则跳过
     if (!this.dbConnection) {
       this.dbConnection = await this.mysqlModule.createConnection({
@@ -73,6 +106,35 @@ export class SQLZenAgent {
     if (this.dbConnection) {
       await this.dbConnection.end();
     }
+    if (this.cacheManager) {
+      await this.cacheManager.close();
+    }
+  }
+
+  /**
+   * 获取缓存统计信息
+   */
+  async getCacheStats() {
+    if (!this.cacheManager) {
+      return null;
+    }
+    return this.cacheManager.getStats();
+  }
+
+  /**
+   * 清空缓存
+   */
+  async clearCache(): Promise<void> {
+    if (this.cacheManager) {
+      await this.cacheManager.clear();
+    }
+  }
+
+  /**
+   * 设置缓存启用状态
+   */
+  setCacheEnabled(enabled: boolean): void {
+    this.cacheEnabled = enabled;
   }
 
   private getSystemPrompt(): string {
@@ -268,55 +330,77 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
     return '';
   }
 
-  async processQueryWithTools(userQuestion: string): Promise<string> {
+  async processQueryWithTools(userQuestion: string, options: { useCache?: boolean } = {}): Promise<string> {
+    const useCache = options.useCache ?? this.cacheEnabled;
+
+    // 1. 检查缓存
+    if (useCache && this.cacheManager) {
+      const queryHash = generateCacheKey(userQuestion);
+      const cached = await this.cacheManager.get(queryHash);
+      if (cached) {
+        console.log('✓ 缓存命中');
+        return cached.result;
+      }
+    }
+
+    // 2. 执行查询
     const messages: Anthropic.MessageParam[] = [
       { role: 'user', content: userQuestion }
     ];
 
     let continueLoop = true;
     let finalResponse = '';
+    const executedSqls: string[] = [];
 
     while (continueLoop) {
-      const response = await this.anthropic.messages.create({
-        model: this.model,
-        max_tokens: 4096,
-        system: this.getSystemPrompt(),
-        messages,
-        tools: [
-          {
-            name: 'execute_bash',
-            description: 'Execute a bash command in schema directory (ls, cat, grep, find)',
-            input_schema: {
-              type: 'object',
-              properties: {
-                command: {
-                  type: 'string',
-                  description: 'The bash command to execute'
-                }
-              },
-              required: ['command']
-            }
-          },
-          {
-            name: 'execute_sql',
-            description: 'Execute a SQL query and return results',
-            input_schema: {
-              type: 'object',
-              properties: {
-                sql: {
-                  type: 'string',
-                  description: 'The SQL query to execute'
+      let response;
+      try {
+        response = await this.anthropic.messages.create({
+          model: this.model,
+          max_tokens: 4096,
+          system: this.getSystemPrompt(),
+          messages,
+          tools: [
+            {
+              name: 'execute_bash',
+              description: 'Execute a bash command in schema directory (ls, cat, grep, find)',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  command: {
+                    type: 'string',
+                    description: 'The bash command to execute'
+                  }
                 },
-                limit: {
-                  type: 'number',
-                  description: 'Maximum number of rows to return (default: 100)'
-                }
-              },
-              required: ['sql']
+                required: ['command']
+              }
+            },
+            {
+              name: 'execute_sql',
+              description: 'Execute a SQL query and return results',
+              input_schema: {
+                type: 'object',
+                properties: {
+                  sql: {
+                    type: 'string',
+                    description: 'The SQL query to execute'
+                  },
+                  limit: {
+                    type: 'number',
+                    description: 'Maximum number of rows to return (default: 100)'
+                  }
+                },
+                required: ['sql']
+              }
             }
-          }
-        ]
-      });
+          ]
+        });
+      } catch (error) {
+        throw new APIRequestError(
+          `API 请求失败: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error instanceof Error ? error : undefined }
+        );
+      }
 
       // 添加 assistant 的响应到消息历史
       messages.push({
@@ -349,11 +433,12 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
               };
             } else if (toolName === 'execute_sql') {
               if (!this.dbConnection) {
-                throw new Error('Database not connected');
+                throw new DatabaseNotConnectedError();
               }
               try {
                 const query = toolInput.limit > 0 ? `${toolInput.sql} LIMIT ${toolInput.limit}` : toolInput.sql;
                 console.log(`📊 Executing SQL: ${query}`);
+                executedSqls.push(query);
                 const [rows] = await this.dbConnection.query(query);
                 toolResult = {
                   type: 'tool_result',
@@ -365,12 +450,19 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
                   }, null, 2)
                 };
               } catch (error) {
+                const dbError = new DatabaseQueryError(
+                  `查询执行失败: ${error instanceof Error ? error.message : String(error)}`,
+                  {
+                    sql: toolInput.sql,
+                    cause: error instanceof Error ? error : undefined
+                  }
+                );
                 toolResult = {
                   type: 'tool_result',
                   tool_use_id: block.id,
                   content: JSON.stringify({
                     success: false,
-                    error: error instanceof Error ? error.message : String(error)
+                    error: dbError.message
                   })
                 };
               }
@@ -389,7 +481,7 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
       } else {
         // 没有更多工具调用，结束循环
         continueLoop = false;
-        
+
         // 提取最终文本响应
         for (const block of response.content) {
           if (block.type === 'text') {
@@ -397,6 +489,19 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
           }
         }
       }
+    }
+
+    // 3. 存储到缓存
+    if (useCache && this.cacheManager && finalResponse) {
+      const queryHash = generateCacheKey(userQuestion);
+      await this.cacheManager.set({
+        queryHash,
+        query: userQuestion,
+        result: finalResponse,
+        sqlExecuted: executedSqls.length > 0 ? executedSqls : undefined,
+        createdAt: new Date(),
+        expiresAt: calculateExpiresAt(this.cacheConfig.ttl)
+      });
     }
 
     return finalResponse;

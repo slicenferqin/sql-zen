@@ -2,6 +2,7 @@ import yaml from 'js-yaml';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import type { Cube } from '../types/index.js';
+import { CubeParseError } from '../errors/index.js';
 
 /**
  * Cube 层解析器，解析 YAML 格式的 Cube 定义文件。
@@ -12,12 +13,8 @@ export interface CubeParseOptions {
   strict?: boolean;
 }
 
-export class CubeParseError extends Error {
-  constructor(message: string, public filePath?: string, public line?: number) {
-    super(message);
-    this.name = 'CubeParseError';
-  }
-}
+// 重新导出 CubeParseError 以保持向后兼容
+export { CubeParseError } from '../errors/index.js';
 
 /**
  * 解析单个 Cube 文件
@@ -28,15 +25,15 @@ export async function parseCubeFile(filePath: string): Promise<Cube> {
     const data = yaml.load(content) as any;
 
     if (!data.cube) {
-      throw new CubeParseError('Missing "cube" field', filePath);
+      throw new CubeParseError('缺少 "cube" 字段', { filePath });
     }
 
     if (!data.dimensions || !Array.isArray(data.dimensions)) {
-      throw new CubeParseError('Missing or invalid "dimensions" field (must be array)', filePath);
+      throw new CubeParseError('"dimensions" 字段缺失或无效（必须是数组）', { filePath });
     }
 
     if (!data.metrics || !Array.isArray(data.metrics)) {
-      throw new CubeParseError('Missing or invalid "metrics" field (must be array)', filePath);
+      throw new CubeParseError('"metrics" 字段缺失或无效（必须是数组）', { filePath });
     }
 
     const cube: Cube = {
@@ -53,7 +50,10 @@ export async function parseCubeFile(filePath: string): Promise<Cube> {
     if (error instanceof CubeParseError) {
       throw error;
     }
-    throw new CubeParseError(`Failed to parse cube file: ${error instanceof Error ? error.message : String(error)}`, filePath);
+    throw new CubeParseError(
+      `解析 Cube 文件失败: ${error instanceof Error ? error.message : String(error)}`,
+      { filePath, cause: error instanceof Error ? error : undefined }
+    );
   }
 }
 
@@ -80,7 +80,13 @@ export async function parseCubesDirectory(dir: string, options: CubeParseOptions
       }
     }
   } catch (error) {
-    throw new CubeParseError(`Failed to read cubes directory: ${error instanceof Error ? error.message : String(error)}`, dir);
+    if (error instanceof CubeParseError) {
+      throw error;
+    }
+    throw new CubeParseError(
+      `读取 Cubes 目录失败: ${error instanceof Error ? error.message : String(error)}`,
+      { filePath: dir, cause: error instanceof Error ? error : undefined }
+    );
   }
 
   return cubes;
@@ -92,15 +98,15 @@ export async function parseCubesDirectory(dir: string, options: CubeParseOptions
 function parseDimensions(dimensions: any[], filePath?: string): any[] {
   return dimensions.map((dim, index) => {
     if (!dim.name) {
-      throw new CubeParseError(`Dimension at index ${index} missing "name" field`, filePath);
+      throw new CubeParseError(`维度索引 ${index} 缺少 "name" 字段`, { filePath });
     }
 
     if (!dim.description) {
-      throw new CubeParseError(`Dimension "${dim.name}" missing "description" field`, filePath);
+      throw new CubeParseError(`维度 "${dim.name}" 缺少 "description" 字段`, { filePath });
     }
 
     if (!dim.column && !dim.columns) {
-      throw new CubeParseError(`Dimension "${dim.name}" must have either "column" or "columns" field`, filePath);
+      throw new CubeParseError(`维度 "${dim.name}" 必须有 "column" 或 "columns" 字段`, { filePath });
     }
 
     return {
@@ -121,24 +127,27 @@ function parseDimensions(dimensions: any[], filePath?: string): any[] {
 function parseMetrics(metrics: any[], filePath?: string): any[] {
   return metrics.map((metric, index) => {
     if (!metric.name) {
-      throw new CubeParseError(`Metric at index ${index} missing "name" field`, filePath);
+      throw new CubeParseError(`度量索引 ${index} 缺少 "name" 字段`, { filePath });
     }
 
     if (!metric.description) {
-      throw new CubeParseError(`Metric "${metric.name}" missing "description" field`, filePath);
+      throw new CubeParseError(`度量 "${metric.name}" 缺少 "description" 字段`, { filePath });
     }
 
     if (!metric.sql) {
-      throw new CubeParseError(`Metric "${metric.name}" missing "sql" field`, filePath);
+      throw new CubeParseError(`度量 "${metric.name}" 缺少 "sql" 字段`, { filePath });
     }
 
     if (!metric.type) {
-      throw new CubeParseError(`Metric "${metric.name}" missing "type" field`, filePath);
+      throw new CubeParseError(`度量 "${metric.name}" 缺少 "type" 字段`, { filePath });
     }
 
     const validTypes = ['sum', 'count', 'avg', 'percentage', 'ratio', 'min', 'max'];
     if (!validTypes.includes(metric.type)) {
-      throw new CubeParseError(`Metric "${metric.name}" has invalid type "${metric.type}". Valid types: ${validTypes.join(', ')}`, filePath);
+      throw new CubeParseError(
+        `度量 "${metric.name}" 的类型 "${metric.type}" 无效。有效类型: ${validTypes.join(', ')}`,
+        { filePath }
+      );
     }
 
     return {
@@ -158,15 +167,15 @@ function parseMetrics(metrics: any[], filePath?: string): any[] {
 function parseFilters(filters: any[], filePath?: string): any[] {
   return filters.map((filter, index) => {
     if (!filter.name) {
-      throw new CubeParseError(`Filter at index ${index} missing "name" field`, filePath);
+      throw new CubeParseError(`过滤器索引 ${index} 缺少 "name" 字段`, { filePath });
     }
 
     if (!filter.sql) {
-      throw new CubeParseError(`Filter "${filter.name}" missing "sql" field`, filePath);
+      throw new CubeParseError(`过滤器 "${filter.name}" 缺少 "sql" 字段`, { filePath });
     }
 
     if (!filter.description) {
-      throw new CubeParseError(`Filter "${filter.name}" missing "description" field`, filePath);
+      throw new CubeParseError(`过滤器 "${filter.name}" 缺少 "description" 字段`, { filePath });
     }
 
     return {
@@ -184,24 +193,27 @@ function parseFilters(filters: any[], filePath?: string): any[] {
 function parseJoins(joins: any[], filePath?: string): any[] {
   return joins.map((join, index) => {
     if (!join.from) {
-      throw new CubeParseError(`Join at index ${index} missing "from" field`, filePath);
+      throw new CubeParseError(`Join 索引 ${index} 缺少 "from" 字段`, { filePath });
     }
 
     if (!join.to) {
-      throw new CubeParseError(`Join at index ${index} missing "to" field`, filePath);
+      throw new CubeParseError(`Join 索引 ${index} 缺少 "to" 字段`, { filePath });
     }
 
     if (!join.type) {
-      throw new CubeParseError(`Join at index ${index} missing "type" field`, filePath);
+      throw new CubeParseError(`Join 索引 ${index} 缺少 "type" 字段`, { filePath });
     }
 
     if (!join.condition) {
-      throw new CubeParseError(`Join at index ${index} missing "condition" field`, filePath);
+      throw new CubeParseError(`Join 索引 ${index} 缺少 "condition" 字段`, { filePath });
     }
 
     const validTypes = ['inner', 'left', 'right', 'full'];
     if (!validTypes.includes(join.type)) {
-      throw new CubeParseError(`Join at index ${index} has invalid type "${join.type}". Valid types: ${validTypes.join(', ')}`, filePath);
+      throw new CubeParseError(
+        `Join 索引 ${index} 的类型 "${join.type}" 无效。有效类型: ${validTypes.join(', ')}`,
+        { filePath }
+      );
     }
 
     return {
