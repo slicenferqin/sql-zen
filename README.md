@@ -306,15 +306,15 @@ columns:
 - [x] Agent Skills 集成（3 个核心 Skills）
 - [x] 完整的设计指南文档
 - [x] 高质量 Schema 示例
-- [x] 单元测试（285 个测试，96%+ 覆盖率）
+- [x] 单元测试（325 个测试，96%+ 覆盖率）
 - [x] 统一错误处理系统
 - [x] 查询结果缓存
 - [x] 生产级监控和日志系统
+- [x] 性能优化（连接池、重试机制、Schema 缓存）
 
 ### 计划中
 
 - [ ] 端到端集成测试
-- [ ] 性能优化（大型数据库支持）
 - [ ] Web UI（可视化界面）
 - [ ] 多模型支持 (GPT-4, Ollama)
 - [ ] 交互式 REPL 模式
@@ -403,6 +403,7 @@ sql-zen ask --cube "最近30天的总收入是多少？"
 - [配置指南](./docs/configuration.md) - 环境变量、命令行选项、配置优先级
 - [缓存系统](./docs/caching.md) - 查询结果缓存配置和使用
 - [日志系统](./docs/logging.md) - 结构化日志、性能监控、请求追踪
+- [性能优化](./docs/performance.md) - 连接池、重试机制、Schema 缓存
 - [设计文档](./docs/design.md) - 架构设计和技术决策（包含双层语义架构）
 - [Roadmap](./docs/roadmap.md) - 版本规划和迭代计划
 - [开发者指南](./AGENTS.md) - AI Agent 开发指南

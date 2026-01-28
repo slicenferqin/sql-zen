@@ -5,10 +5,12 @@ import { SchemaTable, SchemaConfig, Cube } from '../types/index.js';
 import { parseCubesDirectory, validateCube } from './cube-parser.js';
 import { SchemaParseError, SchemaValidationError } from '../errors/index.js';
 import { getLogger, type Logger } from '../logging/index.js';
+import { getSchemaCache } from '../performance/index.js';
 
 export class SchemaParser {
   private schemaDir: string;
   private logger: Logger;
+  private cache = getSchemaCache();
 
   constructor(schemaDir: string = 'schema') {
     this.schemaDir = schemaDir;
@@ -16,6 +18,14 @@ export class SchemaParser {
   }
 
   async loadSchema(options: { includeCubes?: boolean } = {}): Promise<SchemaConfig> {
+    // 1. 检查缓存
+    const cacheKey = `${this.schemaDir}:${options.includeCubes || false}`;
+    const cached = this.cache.getSchema(cacheKey);
+    if (cached) {
+      this.logger.debug('Schema cache hit', { key: cacheKey });
+      return cached;
+    }
+
     const tables: SchemaTable[] = [];
     const relationships: any[] = [];
     const cubes: Cube[] = [];
@@ -60,11 +70,16 @@ export class SchemaParser {
         }
       }
 
-      return {
+      const schema: SchemaConfig = {
         tables,
         relationships: relationships.length > 0 ? relationships : undefined,
         cubes: cubes.length > 0 ? cubes : undefined,
       };
+
+      // 2. 存入缓存
+      this.cache.setSchema(cacheKey, schema);
+
+      return schema;
     } catch (error) {
       if (error instanceof SchemaParseError) {
         throw error;
@@ -80,9 +95,23 @@ export class SchemaParser {
   }
 
   async loadCubes(): Promise<Cube[]> {
+    // 1. 检查缓存
+    const cacheKey = `${this.schemaDir}:cubes`;
+    const cached = this.cache.getCubes(cacheKey);
+    if (cached) {
+      this.logger.debug('Cubes cache hit', { key: cacheKey });
+      return cached;
+    }
+
+    // 2. 加载 Cubes
     const cubesDir = join(this.schemaDir, 'cubes');
     if (await fs.access(cubesDir).then(() => true).catch(() => false)) {
-      return await parseCubesDirectory(cubesDir);
+      const cubes = await parseCubesDirectory(cubesDir);
+
+      // 3. 存入缓存并构建索引
+      this.cache.setCubes(cacheKey, cubes);
+
+      return cubes;
     }
     return [];
   }
@@ -141,36 +170,59 @@ export class SchemaParser {
   }
 
   async findMetric(metricName: string): Promise<{ metric: any; cube: Cube } | undefined> {
-    const cubes = await this.loadCubes();
-    for (const cube of cubes) {
-      const metric = cube.metrics.find((m: any) => m.name === metricName);
-      if (metric) {
-        return { metric, cube };
-      }
+    // 先尝试从索引查找（O(1)）
+    const cached = this.cache.findMetric(metricName);
+    if (cached) {
+      this.logger.debug('Metric found in index', { metric: metricName });
+      return cached;
     }
-    return undefined;
+
+    // 如果索引未命中，加载 Cubes（会构建索引）
+    await this.loadCubes();
+
+    // 再次尝试从索引查找
+    const result = this.cache.findMetric(metricName);
+    if (result) {
+      this.logger.debug('Metric found after loading', { metric: metricName });
+    }
+    return result;
   }
 
   async findDimension(dimensionName: string): Promise<{ dimension: any; cube: Cube } | undefined> {
-    const cubes = await this.loadCubes();
-    for (const cube of cubes) {
-      const dimension = cube.dimensions.find((d: any) => d.name === dimensionName);
-      if (dimension) {
-        return { dimension, cube };
-      }
+    // 先尝试从索引查找（O(1)）
+    const cached = this.cache.findDimension(dimensionName);
+    if (cached) {
+      this.logger.debug('Dimension found in index', { dimension: dimensionName });
+      return cached;
     }
-    return undefined;
+
+    // 如果索引未命中，加载 Cubes（会构建索引）
+    await this.loadCubes();
+
+    // 再次尝试从索引查找
+    const result = this.cache.findDimension(dimensionName);
+    if (result) {
+      this.logger.debug('Dimension found after loading', { dimension: dimensionName });
+    }
+    return result;
   }
 
   async findFilter(filterName: string): Promise<{ filter: any; cube: Cube } | undefined> {
-    const cubes = await this.loadCubes();
-    for (const cube of cubes) {
-      if (!cube.filters) continue;
-      const filter = cube.filters.find((f: any) => f.name === filterName);
-      if (filter) {
-        return { filter, cube };
-      }
+    // 先尝试从索引查找（O(1)）
+    const cached = this.cache.findFilter(filterName);
+    if (cached) {
+      this.logger.debug('Filter found in index', { filter: filterName });
+      return cached;
     }
-    return undefined;
+
+    // 如果索引未命中，加载 Cubes（会构建索引）
+    await this.loadCubes();
+
+    // 再次尝试从索引查找
+    const result = this.cache.findFilter(filterName);
+    if (result) {
+      this.logger.debug('Filter found after loading', { filter: filterName });
+    }
+    return result;
   }
 }

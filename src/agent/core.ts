@@ -11,6 +11,12 @@ import { SQLiteCacheManager, generateCacheKey, calculateExpiresAt } from '../cac
 import { loadCacheConfig } from '../config/cache-config.js';
 import type { CacheConfig } from '../cache/cache-manager.js';
 import { getLogger, getPerformanceMonitor, type Logger } from '../logging/index.js';
+import {
+  loadPerformanceConfig,
+  withRetryAndTimeout,
+  withTimeout,
+  type PerformanceConfig
+} from '../performance/index.js';
 
 export interface AgentOptions {
   apiKey?: string;
@@ -18,6 +24,7 @@ export interface AgentOptions {
   model?: string;
   maxRetries?: number;
   cache?: Partial<CacheConfig> & { enabled?: boolean };
+  performance?: Partial<PerformanceConfig>;
   database?: {
     host?: string;
     port?: number;
@@ -32,6 +39,7 @@ export interface AgentDependencies {
   anthropicClient?: Anthropic;
   bashTool?: BashTool;
   dbConnection?: mysql.Connection;
+  dbPool?: mysql.Pool;
   mysqlModule?: typeof mysql;
   cacheManager?: SQLiteCacheManager;
 }
@@ -40,6 +48,7 @@ export class SQLZenAgent {
   private anthropic: Anthropic;
   private bashTool: BashTool;
   private dbConnection: mysql.Connection | null = null;
+  private dbPool: mysql.Pool | null = null;
   private model: string;
   private mysqlModule: typeof mysql;
   private cacheManager: SQLiteCacheManager | null = null;
@@ -47,6 +56,7 @@ export class SQLZenAgent {
   private cacheEnabled: boolean;
   private logger: Logger;
   private perfMonitor = getPerformanceMonitor();
+  private perfConfig: PerformanceConfig;
 
   constructor(options: AgentOptions = {}, dependencies?: AgentDependencies) {
     // 初始化 logger
@@ -72,7 +82,14 @@ export class SQLZenAgent {
     this.model = options.model || process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
     this.bashTool = dependencies?.bashTool || new BashTool();
     this.dbConnection = dependencies?.dbConnection || null;
+    this.dbPool = dependencies?.dbPool || null;
     this.mysqlModule = dependencies?.mysqlModule || mysql;
+
+    // 性能配置
+    this.perfConfig = loadPerformanceConfig();
+    if (options.performance) {
+      this.perfConfig = { ...this.perfConfig, ...options.performance };
+    }
 
     // 缓存配置
     this.cacheConfig = loadCacheConfig();
@@ -96,18 +113,36 @@ export class SQLZenAgent {
     }
 
     // 如果已经有连接（通过依赖注入），则跳过
-    if (!this.dbConnection) {
+    if (!this.dbConnection && !this.dbPool) {
       this.logger.debug('Connecting to database', {
         host: dbConfig.host || 'localhost',
-        database: dbConfig.database
+        database: dbConfig.database,
+        usePool: this.perfConfig.connectionPool.maxConnections > 1
       });
-      this.dbConnection = await this.mysqlModule.createConnection({
+
+      const connectionConfig = {
         host: dbConfig.host || 'localhost',
         port: dbConfig.port || 3306,
         database: dbConfig.database,
         user: dbConfig.user || 'root',
         password: dbConfig.password || '',
-      });
+      };
+
+      // 根据配置决定使用连接池还是单连接
+      if (this.perfConfig.connectionPool.maxConnections > 1) {
+        this.dbPool = this.mysqlModule.createPool({
+          ...connectionConfig,
+          connectionLimit: this.perfConfig.connectionPool.maxConnections,
+          queueLimit: 0,
+          waitForConnections: true
+        });
+        this.logger.info('Database pool created', {
+          maxConnections: this.perfConfig.connectionPool.maxConnections
+        });
+      } else {
+        this.dbConnection = await this.mysqlModule.createConnection(connectionConfig);
+        this.logger.info('Database connected');
+      }
     }
     this.logger.info('Agent initialized');
   }
@@ -115,6 +150,9 @@ export class SQLZenAgent {
   async cleanup(): Promise<void> {
     if (this.dbConnection) {
       await this.dbConnection.end();
+    }
+    if (this.dbPool) {
+      await this.dbPool.end();
     }
     if (this.cacheManager) {
       await this.cacheManager.close();
@@ -372,46 +410,56 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
       let response;
       try {
         const apiTimer = this.logger.startTimer();
-        response = await this.anthropic.messages.create({
-          model: this.model,
-          max_tokens: 4096,
-          system: this.getSystemPrompt(),
-          messages,
-          tools: [
-            {
-              name: 'execute_bash',
-              description: 'Execute a bash command in schema directory (ls, cat, grep, find)',
-              input_schema: {
-                type: 'object',
-                properties: {
-                  command: {
-                    type: 'string',
-                    description: 'The bash command to execute'
-                  }
-                },
-                required: ['command']
-              }
-            },
-            {
-              name: 'execute_sql',
-              description: 'Execute a SQL query and return results',
-              input_schema: {
-                type: 'object',
-                properties: {
-                  sql: {
-                    type: 'string',
-                    description: 'The SQL query to execute'
+
+        // 使用重试和超时机制包装 API 调用
+        response = await withRetryAndTimeout(
+          () => this.anthropic.messages.create({
+            model: this.model,
+            max_tokens: 4096,
+            system: this.getSystemPrompt(),
+            messages,
+            tools: [
+              {
+                name: 'execute_bash',
+                description: 'Execute a bash command in schema directory (ls, cat, grep, find)',
+                input_schema: {
+                  type: 'object',
+                  properties: {
+                    command: {
+                      type: 'string',
+                      description: 'The bash command to execute'
+                    }
                   },
-                  limit: {
-                    type: 'number',
-                    description: 'Maximum number of rows to return (default: 100)'
-                  }
-                },
-                required: ['sql']
+                  required: ['command']
+                }
+              },
+              {
+                name: 'execute_sql',
+                description: 'Execute a SQL query and return results',
+                input_schema: {
+                  type: 'object',
+                  properties: {
+                    sql: {
+                      type: 'string',
+                      description: 'The SQL query to execute'
+                    },
+                    limit: {
+                      type: 'number',
+                      description: 'Maximum number of rows to return (default: 100)'
+                    }
+                  },
+                  required: ['sql']
+                }
               }
-            }
-          ]
-        });
+            ]
+          }),
+          {
+            maxRetries: this.perfConfig.api.maxRetries,
+            baseDelay: this.perfConfig.api.baseDelay,
+            maxDelay: this.perfConfig.api.maxDelay,
+            timeout: this.perfConfig.api.timeout
+          }
+        );
         this.perfMonitor.recordApiTime(apiTimer());
       } catch (error) {
         this.logger.error('API request failed', { error: error instanceof Error ? error.message : String(error) });
@@ -452,16 +500,28 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
                 content: result.success ? result.output : `Error: ${result.error}`
               };
             } else if (toolName === 'execute_sql') {
-              if (!this.dbConnection) {
+              if (!this.dbConnection && !this.dbPool) {
                 throw new DatabaseNotConnectedError();
               }
               try {
-                const query = toolInput.limit > 0 ? `${toolInput.sql} LIMIT ${toolInput.limit}` : toolInput.sql;
+                // 强制执行最大行数限制
+                const requestedLimit = toolInput.limit || this.perfConfig.query.defaultLimit;
+                const effectiveLimit = Math.min(requestedLimit, this.perfConfig.query.maxRows);
+                const query = `${toolInput.sql} LIMIT ${effectiveLimit}`;
+
                 this.logger.debug('Executing SQL', { sql: query.substring(0, 200) });
                 executedSqls.push(query);
 
                 const sqlTimer = this.logger.startTimer();
-                const [rows] = await this.dbConnection.query(query);
+
+                // 使用连接池或单连接执行查询，并添加超时控制
+                const connection = this.dbPool || this.dbConnection!;
+                const [rows] = await withTimeout(
+                  connection.query(query),
+                  this.perfConfig.query.timeout,
+                  `查询超时 (${this.perfConfig.query.timeout}ms)`
+                );
+
                 const sqlDuration = sqlTimer();
                 this.perfMonitor.recordQueryTime(sqlDuration);
 
@@ -509,6 +569,17 @@ Start your exploration in schema/cubes/, then fallback to schema/tables/ for str
         // 添加工具结果到消息历史
         if ((toolResults.content as any[]).length > 0) {
           messages.push(toolResults);
+        }
+
+        // 实现消息历史窗口，防止内存无限增长
+        if (messages.length > this.perfConfig.messageHistory.maxMessages) {
+          const systemMessageCount = this.perfConfig.messageHistory.preserveSystemMessage ? 0 : 0;
+          const toRemove = messages.length - this.perfConfig.messageHistory.maxMessages;
+          messages.splice(systemMessageCount, toRemove);
+          this.logger.debug('Message history trimmed', {
+            removed: toRemove,
+            remaining: messages.length
+          });
         }
       } else {
         // 没有更多工具调用，结束循环

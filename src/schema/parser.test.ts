@@ -9,6 +9,7 @@ import { SchemaParser } from './parser';
 import { promises as fs } from 'fs';
 import yaml from 'js-yaml';
 import * as cubeParser from './cube-parser.js';
+import { resetSchemaCache } from '../performance/index.js';
 
 // Mock 模块
 jest.mock('fs', () => ({
@@ -67,6 +68,9 @@ describe('SchemaParser', () => {
   };
 
   beforeEach(() => {
+    // 清理缓存，避免测试之间的状态污染
+    resetSchemaCache();
+
     parser = new SchemaParser('schema');
     mockFs = fs as any;
     mockYaml = yaml as any;

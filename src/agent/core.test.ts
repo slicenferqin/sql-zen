@@ -29,13 +29,29 @@ describe('SQLZenAgent', () => {
       end: jest.fn(),
     };
 
-    mockMysqlModule = {
-      createConnection: jest.fn(() => Promise.resolve(mockDbConnection)) as any,
+    const mockDbPool = {
+      query: jest.fn(),
+      end: jest.fn(),
     };
 
-    // 使用依赖注入创建 agent
+    mockMysqlModule = {
+      createConnection: jest.fn(() => Promise.resolve(mockDbConnection)) as any,
+      createPool: jest.fn(() => mockDbPool) as any,
+    };
+
+    // 使用依赖注入创建 agent，并设置为单连接模式
     agent = new SQLZenAgent(
-      { model: 'claude-3-5-sonnet-20241022' },
+      {
+        model: 'claude-3-5-sonnet-20241022',
+        performance: {
+          connectionPool: {
+            minConnections: 1,
+            maxConnections: 1,  // 使用单连接模式
+            acquireTimeout: 10000,
+            idleTimeout: 60000
+          }
+        }
+      },
       {
         anthropicClient: mockAnthropicClient as any,
         mysqlModule: mockMysqlModule as any,
