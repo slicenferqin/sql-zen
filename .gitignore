@@ -30,3 +30,19 @@ coverage/
 # Temporary files
 tmp/
 temp/
+
+# Claude Code
+.claude/
+
+# Project management files (not part of the product)
+AGENTS.md
+CLI_OPTIMIZATION_TASKS.md
+TESTING_PROGRESS.md
+TESTING_STATUS.md
+chatbi-prd.md
+
+# Build artifacts
+out/
+
+# Media files
+video/
